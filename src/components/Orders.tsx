@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../supabaseClient'
 
-type Customer = { id:number; name:string }
+type Customer = { id:number; name:string; address?: string | null }
 type Product  = {
   id:number; sku:string; name:string; price:number;    // price per UOM3 (PCS)
   uom1_name:string|null; uom2_name:string|null; uom3_name:string|null;
@@ -27,20 +27,23 @@ export default function Orders() {
   const searchBoxRef = useRef<HTMLDivElement>(null)
 
   // ==== Customer typeahead ====
-  const [cq, setCq] = useState('')                         // input text / selected name
+  const [cq, setCq] = useState('')                         // shows "Name - Address" when selected
   const [isCustOpen, setIsCustOpen] = useState(false)
   const custRef = useRef<HTMLInputElement>(null)
   const custBoxRef = useRef<HTMLDivElement>(null)
 
   useEffect(()=>{ (async()=>{
-    const c = await supabase.from('customers').select('id,name').order('name')
-    if (!c.error) setCustomers(c.data as any)
+    const c = await supabase
+      .from('customers')
+      .select('id,name,address')          // include address
+      .order('name')
+    if (!c.error) setCustomers((c.data as any) || [])
 
     const p = await supabase.from('products')
       .select('id,sku,name,price,uom1_name,uom2_name,uom3_name,conv1_to_2,conv2_to_3')
       .eq('is_active', true)
       .order('name')
-    if (!p.error) setProducts(p.data as any)
+    if (!p.error) setProducts((p.data as any) || [])
 
     await loadMyOrders()
   })() }, [])
@@ -52,7 +55,7 @@ export default function Orders() {
     if (!error) setMyOrders(data as any)
   }
 
-  // Close dropdowns when clicking outside
+  // Close BOTH dropdowns when clicking outside
   useEffect(() => {
     function handleDocMouseDown(e: MouseEvent) {
       const t = e.target as Node
@@ -93,7 +96,10 @@ export default function Orders() {
     const term = cq.trim().toLowerCase()
     if (!term) return customers.slice(0, 30)
     return customers
-      .filter(c => c.name.toLowerCase().includes(term))
+      .filter(c =>
+        c.name.toLowerCase().includes(term) ||
+        (c.address || '').toLowerCase().includes(term)
+      )
       .slice(0, 30)
   }, [customers, cq])
 
@@ -110,6 +116,7 @@ export default function Orders() {
     if (!p) return
     const pricePerUnit = Number(p.price) || 0
     setRows(prev => {
+      // default add as UOM3; if same row exists with UOM3, bump qty
       const idx = prev.findIndex(r => r.product_id === pid && r.uom === 3)
       if (idx >= 0) {
         const next = [...prev]
@@ -120,7 +127,6 @@ export default function Orders() {
       const lineUnits = unitsPer(p, 3)
       return [...prev, { id: uuid(), product_id: pid, uom: 3, qty: 1, price: pricePerUnit * lineUnits }]
     })
-    // MOBILE: close keyboard but keep dropdown open so user can add more
     searchRef.current?.blur()
   }
 
@@ -219,14 +225,14 @@ export default function Orders() {
 
         <form className="grid" onSubmit={saveOrder}>
 
-          {/* Customer selector (searchable) */}
+          {/* Customer selector (searchable; shows Name - Address) */}
           <div className="grid two">
             <div ref={custBoxRef} style={{ position:'relative' }}>
               <label className="small" style={{ display:'block', marginBottom:6 }}><b>Customer</b></label>
               <div style={{ display:'flex', gap:8 }}>
                 <input
                   className="input"
-                  placeholder="Search customer…"
+                  placeholder="Search customer by name or address…"
                   value={cq}
                   onChange={e => { setCq(e.target.value); setIsCustOpen(true) }}
                   onFocus={() => setIsCustOpen(true)}
@@ -277,12 +283,12 @@ export default function Orders() {
                       onMouseDown={e => {
                         e.preventDefault()
                         setCustomerId(c.id)
-                        setCq(c.name)
+                        setCq(`${c.name} - ${c.address || ''}`)   // show "Name - Address"
                         setIsCustOpen(false)
                         custRef.current?.blur()
                       }}
                     >
-                      {c.name}
+                      {c.name} - {c.address || ''}
                     </div>
                   ))}
                 </div>
@@ -290,7 +296,10 @@ export default function Orders() {
 
               {customerId && (
                 <div className="small" style={{ marginTop:6, opacity:.7 }}>
-                  Selected: {customers.find(x => x.id === customerId)?.name || '—'}
+                  Selected: {(() => {
+                    const c = customers.find(x => x.id === customerId)
+                    return c ? `${c.name} - ${c.address || ''}` : '—'
+                  })()}
                 </div>
               )}
             </div>
