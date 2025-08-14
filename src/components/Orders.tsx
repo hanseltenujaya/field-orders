@@ -20,11 +20,17 @@ export default function Orders() {
   const [notes, setNotes] = useState('')
   const [myOrders, setMyOrders] = useState<any[]>([])
 
-  // Typeahead search
+  // ==== Product typeahead ====
   const [q, setQ] = useState('')
   const [isOpen, setIsOpen] = useState(false)
   const searchRef = useRef<HTMLInputElement>(null)
   const searchBoxRef = useRef<HTMLDivElement>(null)
+
+  // ==== Customer typeahead ====
+  const [cq, setCq] = useState('')                         // input text / selected name
+  const [isCustOpen, setIsCustOpen] = useState(false)
+  const custRef = useRef<HTMLInputElement>(null)
+  const custBoxRef = useRef<HTMLDivElement>(null)
 
   useEffect(()=>{ (async()=>{
     const c = await supabase.from('customers').select('id,name').order('name')
@@ -46,11 +52,12 @@ export default function Orders() {
     if (!error) setMyOrders(data as any)
   }
 
-  // Close dropdown when clicking outside
+  // Close dropdowns when clicking outside
   useEffect(() => {
     function handleDocMouseDown(e: MouseEvent) {
-      if (!searchBoxRef.current) return
-      if (!searchBoxRef.current.contains(e.target as Node)) setIsOpen(false)
+      const t = e.target as Node
+      if (!searchBoxRef.current?.contains(t)) setIsOpen(false)
+      if (!custBoxRef.current?.contains(t)) setIsCustOpen(false)
     }
     document.addEventListener('mousedown', handleDocMouseDown)
     return () => document.removeEventListener('mousedown', handleDocMouseDown)
@@ -58,7 +65,9 @@ export default function Orders() {
 
   // Close on Escape
   useEffect(() => {
-    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') setIsOpen(false) }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') { setIsOpen(false); setIsCustOpen(false) }
+    }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
   }, [])
@@ -80,6 +89,14 @@ export default function Orders() {
       .slice(0, 30)
   }, [products, q])
 
+  const filteredCustomers = useMemo(() => {
+    const term = cq.trim().toLowerCase()
+    if (!term) return customers.slice(0, 30)
+    return customers
+      .filter(c => c.name.toLowerCase().includes(term))
+      .slice(0, 30)
+  }, [customers, cq])
+
   function unitsPer(product: Product, uom: 1|2|3) {
     const c12 = Math.max(1, product.conv1_to_2 || 1)
     const c23 = Math.max(1, product.conv2_to_3 || 1)
@@ -93,7 +110,6 @@ export default function Orders() {
     if (!p) return
     const pricePerUnit = Number(p.price) || 0
     setRows(prev => {
-      // default add as UOM3; if same row exists with UOM3, bump qty
       const idx = prev.findIndex(r => r.product_id === pid && r.uom === 3)
       if (idx >= 0) {
         const next = [...prev]
@@ -186,6 +202,8 @@ export default function Orders() {
           .col-prod   { width: 54%; }
           .col-uom    { width: 23%; }
           .col-qty    { width: 23%; }
+
+          /* Off-screen to the right (scroll to see) */
           .col-price  { width: 28%; }
           .col-total  { width: 22%; text-align:right; }
           .col-actions{ width: 14%; }
@@ -194,21 +212,88 @@ export default function Orders() {
           .qty-input { min-width:56px; width:100%; text-align:center; }
         }
       `}</style>
+
       {/* === Create Order Card === */}
       <div className="card">
         <h3>Create Order</h3>
 
         <form className="grid" onSubmit={saveOrder}>
-          {/* Customer selector */}
+
+          {/* Customer selector (searchable) */}
           <div className="grid two">
-            <select
-              className="input"
-              value={customerId}
-              onChange={e=>setCustomerId(Number((e.target as HTMLSelectElement).value))}
-            >
-              <option value="">Select customer</option>
-              {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
+            <div ref={custBoxRef} style={{ position:'relative' }}>
+              <label className="small" style={{ display:'block', marginBottom:6 }}><b>Customer</b></label>
+              <div style={{ display:'flex', gap:8 }}>
+                <input
+                  className="input"
+                  placeholder="Search customer…"
+                  value={cq}
+                  onChange={e => { setCq(e.target.value); setIsCustOpen(true) }}
+                  onFocus={() => setIsCustOpen(true)}
+                  autoComplete="off"
+                  spellCheck={false}
+                  ref={custRef}
+                  style={{ flex:1 }}
+                />
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => {
+                    setCustomerId('');
+                    setCq('');
+                    setIsCustOpen(false);
+                    custRef.current?.blur();
+                  }}
+                >
+                  Clear
+                </button>
+              </div>
+
+              {/* Customer dropdown */}
+              {isCustOpen && (
+                <div
+                  style={{
+                    position:'absolute',
+                    top:'100%',
+                    left:0,
+                    right:0,
+                    border:'1px solid #ccc',
+                    background:'#fff',
+                    zIndex:1000,
+                    maxHeight:'40vh',
+                    overflowY:'auto',
+                    borderTop:'none',
+                    borderRadius:'0 0 10px 10px',
+                    boxShadow:'0 10px 18px rgba(0,0,0,0.08)'
+                  }}
+                >
+                  {filteredCustomers.length === 0 && (
+                    <div className="small" style={{ padding:'10px 12px', opacity:.7 }}>No customers.</div>
+                  )}
+                  {filteredCustomers.map(c => (
+                    <div
+                      key={c.id}
+                      style={{ padding:'10px 12px', cursor:'pointer' }}
+                      onMouseDown={e => {
+                        e.preventDefault()
+                        setCustomerId(c.id)
+                        setCq(c.name)
+                        setIsCustOpen(false)
+                        custRef.current?.blur()
+                      }}
+                    >
+                      {c.name}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {customerId && (
+                <div className="small" style={{ marginTop:6, opacity:.7 }}>
+                  Selected: {customers.find(x => x.id === customerId)?.name || '—'}
+                </div>
+              )}
+            </div>
             <div />
           </div>
 
@@ -236,7 +321,7 @@ export default function Orders() {
               </button>
             </div>
 
-            {/* Floating dropdown under the input */}
+            {/* Floating product dropdown */}
             {isOpen && q.trim() !== '' && filteredProducts.length > 0 && (
               <div
                 style={{
