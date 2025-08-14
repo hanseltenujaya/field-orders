@@ -1,19 +1,164 @@
-* { box-sizing: border-box; }
-body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; background:#f7f7f8; color:#111; }
-.container { max-width: 1100px; margin: 0 auto; padding: 16px; }
-.card { background: #fff; border: 1px solid #e6e6e6; border-radius: 12px; padding: 16px; }
-.input { width: 100%; padding: 10px 12px; border:1px solid #ddd; border-radius: 10px; }
-.btn { display:inline-flex; align-items:center; gap:8px; padding:10px 14px; border-radius: 10px; border:1px solid #ddd; background:#fff; cursor:pointer; }
-.btn.primary { background:#2563eb; border-color:#2563eb; color:#fff; }
-.btn.danger { background:#dc2626; border-color:#dc2626; color:#fff; }
-.badge { display:inline-block; padding:4px 8px; font-size:12px; border-radius: 999px; background:#eef2ff; color:#3730a3; }
-.grid { display:grid; gap:12px; }
-.grid.two { grid-template-columns: repeat(2, minmax(0,1fr)); }
-.grid.three { grid-template-columns: repeat(3, minmax(0,1fr)); }
-.table { width:100%; border-collapse: collapse; }
-.table th, .table td { text-align:left; padding:8px; border-top:1px solid #eee; }
-nav { display:flex; gap:8px; margin-bottom: 12px; }
-select.input { padding-right: 30px; }
-hr.sep { border:0; border-top:1px solid #eee; margin: 12px 0; }
-.small { font-size: 12px; color:#555; }
-.status { text-transform: capitalize; }
+/* --- Base / Reset ------------------------------------------------------- */
+:root{
+  --bg: #f6f7fb;
+  --card:#fff;
+  --text:#111;
+  --muted:#6b7280;
+  --primary:#2563eb;
+  --primary-weak:#e5edff;
+  --border:#e5e7eb;
+  --radius:12px;
+  --gap:12px;
+  --tap:44px;            /* min touch size */
+}
+
+*{box-sizing:border-box}
+html,body,#root{height:100%}
+html,body{
+  margin:0;
+  background:var(--bg);
+  color:var(--text);
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji";
+  -webkit-text-size-adjust:100%;
+}
+img{max-width:100%;display:block}
+
+/* Avoid zoom on mobile when focusing inputs */
+input,select,textarea,button{font-size:16px;}
+
+/* --- Layout ------------------------------------------------------------- */
+.container{
+  max-width:1100px;
+  margin:0 auto;
+  padding:16px;
+}
+
+.grid{
+  display:grid;
+  gap:var(--gap);
+}
+.grid.two{
+  grid-template-columns: 1fr 1fr;
+}
+@media (max-width: 720px){
+  .grid.two{ grid-template-columns: 1fr; }
+}
+
+/* --- Cards -------------------------------------------------------------- */
+.card{
+  background:var(--card);
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  padding:16px;
+  overflow-x:auto; /* make wide tables scroll inside card on mobile */
+}
+
+/* --- Text --------------------------------------------------------------- */
+h2{margin:0 0 8px;font-size:22px}
+h3{margin:0 0 10px;font-size:18px}
+.small{font-size:12px;color:var(--muted)}
+
+/* --- Inputs / Buttons --------------------------------------------------- */
+.input, .btn, select, textarea{
+  height:var(--tap);
+  min-height:var(--tap);
+  border:1px solid var(--border);
+  border-radius:10px;
+  padding:0 12px;
+  background:#fff;
+}
+
+.input, select{
+  width:100%;
+}
+
+textarea.input, textarea{
+  height:auto;
+  min-height:92px;
+  padding:10px 12px;
+  resize:vertical;
+}
+
+.btn{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:6px;
+  font-weight:600;
+  cursor:pointer;
+  background:#f8fafc;
+}
+.btn.primary{
+  background:var(--primary);
+  border-color:var(--primary);
+  color:#fff;
+}
+.btn:disabled{opacity:.6;cursor:not-allowed}
+
+/* --- Nav --------------------------------------------------------------- */
+nav{
+  display:flex;
+  gap:8px;
+  overflow:auto;       /* horizontal scroll on small screens */
+  padding-bottom:4px;
+}
+nav .btn{
+  white-space:nowrap;
+  padding:0 14px;
+}
+
+/* --- Tables ------------------------------------------------------------- */
+/* Keep native table on desktop, but make it scroll within the card on mobile */
+.table{
+  border-collapse:separate;
+  border-spacing:0;
+  width:100%;
+  min-width:600px;     /* so it scrolls horizontally if too narrow */
+}
+.table th, .table td{
+  text-align:left;
+  padding:10px 12px;
+  border-bottom:1px solid var(--border);
+  vertical-align:middle;
+  white-space:nowrap;  /* prevent squish on small screens */
+}
+.table thead th{
+  font-size:12px;
+  text-transform:uppercase;
+  color:var(--muted);
+  letter-spacing:.02em;
+}
+
+/* --- Status tag --------------------------------------------------------- */
+.status{
+  display:inline-flex;
+  align-items:center;
+  padding:4px 10px;
+  border-radius:999px;
+  background:var(--primary-weak);
+  color:#1e40af;
+  font-weight:600;
+  font-size:12px;
+}
+
+/* --- Typeahead dropdown ------------------------------------------------- */
+.dropdown-row:hover{ background:#f8fafc; }
+
+/* --- Sticky save bar (optional helper class) --------------------------- */
+/* If you wrap actions in <div className="sticky-actions"> they'll stick on phones */
+.sticky-actions{
+  position:sticky;
+  bottom:0;
+  background:linear-gradient(to top, rgba(246,247,251,.95), rgba(246,247,251,.65));
+  padding:8px 0;
+  backdrop-filter: blur(6px);
+}
+
+/* --- Spacing tweaks on very small screens ------------------------------ */
+@media (max-width:480px){
+  .container{ padding:12px; }
+  h2{ font-size:20px }
+  h3{ font-size:17px }
+  .card{ padding:12px }
+  .btn, .input, select{ border-radius:10px }
+}
