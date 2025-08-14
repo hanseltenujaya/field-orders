@@ -99,7 +99,6 @@ export default function Orders() {
     if (!p) return
     const pricePerUnit = Number(p.price) || 0
     setRows(prev => {
-      // default add as UOM3; if same row exists with UOM3, bump qty
       const idx = prev.findIndex(r => r.product_id === pid && r.uom === 3)
       if (idx >= 0) {
         const next = [...prev]
@@ -110,7 +109,6 @@ export default function Orders() {
       const lineUnits = unitsPer(p, 3)
       return [...prev, { id: uuid(), product_id: pid, uom: 3, qty: 1, price: pricePerUnit * lineUnits }]
     })
-    // MOBILE: close keyboard but keep dropdown open so user can add more
     searchRef.current?.blur()
   }
 
@@ -150,7 +148,6 @@ export default function Orders() {
     }]).select().single()
     if (e1) return alert(e1.message)
 
-    // payload with uom_level + qty_base (pcs)
     const payload = rows.map(r => {
       const p = byId[r.product_id!]
       const per = unitsPer(p, r.uom)
@@ -174,77 +171,32 @@ export default function Orders() {
 
   return (
     <div className="grid">
-      {/* === Product Search (outside of any card; avoids nested scroll) === */}
-      <div ref={searchBoxRef} style={{position:'relative'}}>
-        <label className="small" style={{display:'block', marginBottom:6}}><b>Add Products</b></label>
-        <div style={{display:'flex', gap:8}}>
-          <input
-            className="input"
-            placeholder="Search SKU or name…"
-            value={q}
-            onChange={e=>{ setQ(e.target.value); setIsOpen(true) }}
-            onFocus={()=> setIsOpen(!!q.trim())}
-            autoComplete="off"
-            spellCheck={false}
-            ref={searchRef}
-            style={{flex:1}}
-          />
-          <button
-            type="button"
-            className="btn"
-            onClick={()=>{ setQ(''); setIsOpen(false); searchRef.current?.blur() }}
-          >
-            Clear
-          </button>
-        </div>
+      {/* === Mobile table CSS (fits Product|UOM|Qty without horizontal scroll) === */}
+      <style>{`
+        .cell-prod { max-width: 1px; } /* enable ellipsis shrink */
+        .ellipsis { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-        {/* Floating dropdown under the input */}
-        {isOpen && q.trim() !== '' && filteredProducts.length > 0 && (
-          <div
-            style={{
-              position:'absolute',
-              top:'100%',
-              left:0,
-              right:0,
-              border:'1px solid #ccc',
-              background:'#fff',
-              zIndex:1000,
-              maxHeight: '50vh',       // taller on phones, but not full screen
-              overflowY:'auto',
-              borderTop:'none',
-              borderRadius:'0 0 10px 10px',
-              boxShadow:'0 10px 18px rgba(0,0,0,0.08)'
-            }}
-          >
-            {filteredProducts.map(p => (
-              <div
-                key={p.id}
-                style={{
-                  padding:'12px 14px',
-                  cursor:'pointer',
-                  display:'flex',
-                  gap:12,
-                  alignItems:'center'
-                }}
-                onMouseDown={e => { e.preventDefault(); addProductToOrder(p.id) }}
-              >
-                <div style={{width:100, fontFamily:'monospace'}}>{p.sku}</div>
-                <div style={{flex:1}}>{p.name}</div>
-                <div style={{whiteSpace:'nowrap'}}>
-                  {(Number(p.price)||0).toLocaleString('id-ID',{style:'currency',currency:'IDR'})} / {(p.uom3_name||'PCS')}
-                </div>
-                <span className="btn">+ Add</span>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+        @media (max-width: 640px) {
+          /* Hide non-essential columns on phones */
+          .col-price, .col-total { display: none; }
+
+          /* Tight column widths so all 3 fit */
+          .col-prod  { width: 58%; }
+          .col-uom   { width: 22%; }
+          .col-qty   { width: 20%; }
+
+          /* Bigger tap targets */
+          .uom-select, .qty-input { font-size: 16px; }
+          .qty-input { width: 100%; min-width: 64px; }
+        }
+      `}</style>
 
       {/* === Create Order Card === */}
       <div className="card">
         <h3>Create Order</h3>
 
         <form className="grid" onSubmit={saveOrder}>
+          {/* Customer selector */}
           <div className="grid two">
             <select
               className="input"
@@ -257,16 +209,82 @@ export default function Orders() {
             <div />
           </div>
 
-          {/* Order items with larger UOM / Qty on mobile */}
+          {/* === Product Search moved HERE (directly under customer input) === */}
+          <div ref={searchBoxRef} style={{position:'relative', marginTop: 6}}>
+            <label className="small" style={{display:'block', marginBottom:6}}><b>Add Products</b></label>
+            <div style={{display:'flex', gap:8}}>
+              <input
+                className="input"
+                placeholder="Search SKU or name…"
+                value={q}
+                onChange={e=>{ setQ(e.target.value); setIsOpen(true) }}
+                onFocus={()=> setIsOpen(!!q.trim())}
+                autoComplete="off"
+                spellCheck={false}
+                ref={searchRef}
+                style={{flex:1}}
+              />
+              <button
+                type="button"
+                className="btn"
+                onClick={()=>{ setQ(''); setIsOpen(false); searchRef.current?.blur() }}
+              >
+                Clear
+              </button>
+            </div>
+
+            {/* Floating dropdown under the input */}
+            {isOpen && q.trim() !== '' && filteredProducts.length > 0 && (
+              <div
+                style={{
+                  position:'absolute',
+                  top:'100%',
+                  left:0,
+                  right:0,
+                  border:'1px solid #ccc',
+                  background:'#fff',
+                  zIndex:1000,
+                  maxHeight: '50vh',
+                  overflowY:'auto',
+                  borderTop:'none',
+                  borderRadius:'0 0 10px 10px',
+                  boxShadow:'0 10px 18px rgba(0,0,0,0.08)'
+                }}
+              >
+                {filteredProducts.map(p => (
+                  <div
+                    key={p.id}
+                    style={{
+                      padding:'12px 14px',
+                      cursor:'pointer',
+                      display:'flex',
+                      gap:12,
+                      alignItems:'center'
+                    }}
+                    onMouseDown={e => { e.preventDefault(); addProductToOrder(p.id) }}
+                  >
+                    <div style={{width:100, fontFamily:'monospace'}}>{p.sku}</div>
+                    <div style={{flex:1}}>{p.name}</div>
+                    <div style={{whiteSpace:'nowrap'}}>
+                      {(Number(p.price)||0).toLocaleString('id-ID',{style:'currency',currency:'IDR'})} / {(p.uom3_name||'PCS')}
+                    </div>
+                    <span className="btn">+ Add</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Order items table */}
           <div className="card" style={{marginTop:8, padding:0}}>
             <table className="table">
               <thead>
                 <tr>
-                  <th style={{width:'40%'}}>Product</th>
+                  <th className="col-prod">Product</th>
                   <th className="col-uom">UOM</th>
                   <th className="col-qty">Qty</th>
-                  <th>Price / UOM</th>
-                  <th>Line Total</th>
+                  <th className="col-price">Price / UOM</th>
+                  <th className="col-total">Line Total</th>
                   <th style={{width:80}}></th>
                 </tr>
               </thead>
@@ -278,7 +296,11 @@ export default function Orders() {
                   const u3 = p?.uom3_name || 'UOM3'
                   return (
                     <tr key={r.id}>
-                      <td>{p ? `${p.sku} — ${p.name}` : <i className="small">Not selected</i>}</td>
+                      <td className="cell-prod">
+                        {p
+                          ? <div className="ellipsis">{p.sku} — {p.name}</div>
+                          : <i className="small">Not selected</i>}
+                      </td>
                       <td>
                         {p ? (
                           <select
@@ -302,8 +324,8 @@ export default function Orders() {
                           onChange={e=>setRows(rs=>rs.map(x=>x.id===r.id?{...x, qty:Number((e.target as HTMLInputElement).value)||0}:x))}
                         />
                       </td>
-                      <td>{r.price.toLocaleString('id-ID',{style:'currency',currency:'IDR'})}</td>
-                      <td>{(r.qty*r.price).toLocaleString('id-ID',{style:'currency',currency:'IDR'})}</td>
+                      <td className="col-price">{r.price.toLocaleString('id-ID',{style:'currency',currency:'IDR'})}</td>
+                      <td className="col-total">{(r.qty*r.price).toLocaleString('id-ID',{style:'currency',currency:'IDR'})}</td>
                       <td><button type="button" className="btn" onClick={()=>removeRow(r.id)}>✕</button></td>
                     </tr>
                   )
