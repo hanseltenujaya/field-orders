@@ -171,28 +171,29 @@ export default function Orders() {
       {/* === Mobile-first table tweaks (show Product+UOM+Qty first) === */}
       <style>{`
         .cell-prod { max-width: 1px; white-space: normal; word-break: break-word; }
-        .wrap-2 { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; } /* 2-line wrap */
+        .wrap-2 { 
+          display: -webkit-box;
+          -webkit-line-clamp: 2;
+          -webkit-box-orient: vertical;
+          overflow: hidden;
+          white-space: normal;
+        }
 
         @media (max-width: 640px) {
           .table { table-layout: fixed; width:100%; }
           .table th, .table td { padding: 8px 6px; }
 
-          /* First viewport: Product + UOM + Qty (<= 100%) */
-          .col-prod   { width: 54%; }   /* product wraps to 2 lines */
+          .col-prod   { width: 54%; }
           .col-uom    { width: 23%; }
           .col-qty    { width: 23%; }
-
-          /* Offscreen to the right (scroll horizontally to see) */
           .col-price  { width: 28%; }
           .col-total  { width: 22%; text-align:right; }
           .col-actions{ width: 14%; }
 
-          /* Comfortable tap targets */
           .uom-select, .qty-input { font-size:16px; }
           .qty-input { min-width:56px; width:100%; text-align:center; }
         }
       `}</style>
-
       {/* === Create Order Card === */}
       <div className="card">
         <h3>Create Order</h3>
