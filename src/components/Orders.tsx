@@ -12,9 +12,9 @@ type OrderRow = { id:string; product_id:number | null; uom: 1|2|3; qty:number; p
 function uuid() { return Math.random().toString(36).slice(2) + Date.now().toString(36) }
 
 export default function Orders() {
-  const [customers,setCustomers] = useState<Customer[]>([])
-  const [products,setProducts]   = useState<Product[]>([])
-  const [customerId, setCustomerId] = useState<number|''>('')
+  const [customers,setCustomers]   = useState<Customer[]>([])
+  const [products,setProducts]     = useState<Product[]>([])
+  const [customerId, setCustomerId]= useState<number|''>('')
 
   const [rows, setRows] = useState<OrderRow[]>([])
   const [notes, setNotes] = useState('')
@@ -46,6 +46,7 @@ export default function Orders() {
     if (!error) setMyOrders(data as any)
   }
 
+  // Close dropdown when clicking outside
   useEffect(() => {
     function handleDocMouseDown(e: MouseEvent) {
       if (!searchBoxRef.current) return
@@ -54,6 +55,8 @@ export default function Orders() {
     document.addEventListener('mousedown', handleDocMouseDown)
     return () => document.removeEventListener('mousedown', handleDocMouseDown)
   }, [])
+
+  // Close on Escape
   useEffect(() => {
     function onKey(e: KeyboardEvent) { if (e.key === 'Escape') setIsOpen(false) }
     document.addEventListener('keydown', onKey)
@@ -74,7 +77,7 @@ export default function Orders() {
         p.name.toLowerCase().includes(term) ||
         p.sku.toLowerCase().includes(term)
       )
-      .slice(0, 20)
+      .slice(0, 30)
   }, [products, q])
 
   function unitsPer(product: Product, uom: 1|2|3) {
@@ -94,10 +97,9 @@ export default function Orders() {
   function addProductToOrder(pid: number) {
     const p = byId[pid]
     if (!p) return
-    // default to smallest unit (UOM3) qty=1
     const pricePerUnit = Number(p.price) || 0
     setRows(prev => {
-      // if already in list with same UOM, just +1 qty on that line
+      // default add as UOM3; if same row exists with UOM3, bump qty
       const idx = prev.findIndex(r => r.product_id === pid && r.uom === 3)
       if (idx >= 0) {
         const next = [...prev]
@@ -108,7 +110,8 @@ export default function Orders() {
       const lineUnits = unitsPer(p, 3)
       return [...prev, { id: uuid(), product_id: pid, uom: 3, qty: 1, price: pricePerUnit * lineUnits }]
     })
-    requestAnimationFrame(() => searchRef.current?.focus())
+    // MOBILE: close keyboard but keep dropdown open so user can add more
+    searchRef.current?.blur()
   }
 
   function changeUom(rowId: string, u: 1|2|3) {
@@ -147,7 +150,7 @@ export default function Orders() {
     }]).select().single()
     if (e1) return alert(e1.message)
 
-    // build payload with uom_level + qty_base (pcs)
+    // payload with uom_level + qty_base (pcs)
     const payload = rows.map(r => {
       const p = byId[r.product_id!]
       const per = unitsPer(p, r.uom)
@@ -156,9 +159,9 @@ export default function Orders() {
         order_id: o.id,
         product_id: r.product_id!,
         qty: r.qty,
-        price: r.price,          // price per selected UOM
-        uom_level: r.uom,        // 1/2/3
-        qty_base                 // total pcs
+        price: r.price,
+        uom_level: r.uom,
+        qty_base
       }
     })
     const { error: e2 } = await supabase.from('order_items').insert(payload)
@@ -171,6 +174,73 @@ export default function Orders() {
 
   return (
     <div className="grid">
+      {/* === Product Search (outside of any card; avoids nested scroll) === */}
+      <div ref={searchBoxRef} style={{position:'relative'}}>
+        <label className="small" style={{display:'block', marginBottom:6}}><b>Add Products</b></label>
+        <div style={{display:'flex', gap:8}}>
+          <input
+            className="input"
+            placeholder="Search SKU or name…"
+            value={q}
+            onChange={e=>{ setQ(e.target.value); setIsOpen(true) }}
+            onFocus={()=> setIsOpen(!!q.trim())}
+            autoComplete="off"
+            spellCheck={false}
+            ref={searchRef}
+            style={{flex:1}}
+          />
+          <button
+            type="button"
+            className="btn"
+            onClick={()=>{ setQ(''); setIsOpen(false); searchRef.current?.blur() }}
+          >
+            Clear
+          </button>
+        </div>
+
+        {/* Floating dropdown under the input */}
+        {isOpen && q.trim() !== '' && filteredProducts.length > 0 && (
+          <div
+            style={{
+              position:'absolute',
+              top:'100%',
+              left:0,
+              right:0,
+              border:'1px solid #ccc',
+              background:'#fff',
+              zIndex:1000,
+              maxHeight: '50vh',       // taller on phones, but not full screen
+              overflowY:'auto',
+              borderTop:'none',
+              borderRadius:'0 0 10px 10px',
+              boxShadow:'0 10px 18px rgba(0,0,0,0.08)'
+            }}
+          >
+            {filteredProducts.map(p => (
+              <div
+                key={p.id}
+                style={{
+                  padding:'12px 14px',
+                  cursor:'pointer',
+                  display:'flex',
+                  gap:12,
+                  alignItems:'center'
+                }}
+                onMouseDown={e => { e.preventDefault(); addProductToOrder(p.id) }}
+              >
+                <div style={{width:100, fontFamily:'monospace'}}>{p.sku}</div>
+                <div style={{flex:1}}>{p.name}</div>
+                <div style={{whiteSpace:'nowrap'}}>
+                  {(Number(p.price)||0).toLocaleString('id-ID',{style:'currency',currency:'IDR'})} / {(p.uom3_name||'PCS')}
+                </div>
+                <span className="btn">+ Add</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* === Create Order Card === */}
       <div className="card">
         <h3>Create Order</h3>
 
@@ -187,63 +257,14 @@ export default function Orders() {
             <div />
           </div>
 
-          {/* Product search with sticky dropdown */}
-          <div className="card" style={{marginTop:8}}>
-            <b>Add Products</b>
-            <div ref={searchBoxRef} style={{position:'relative', marginTop:8, maxWidth:520}}>
-              <div style={{display:'flex', gap:8}}>
-                <input
-                  className="input"
-                  placeholder="Search SKU or name…"
-                  value={q}
-                  onChange={e=>{ setQ(e.target.value); setIsOpen(true) }}
-                  onFocus={()=> setIsOpen(!!q.trim())}
-                  autoComplete="off"
-                  spellCheck={false}
-                  ref={searchRef}
-                />
-                <button type="button" className="btn" onClick={()=>{ setQ(''); setIsOpen(false); searchRef.current?.focus() }}>Clear</button>
-              </div>
-
-              {isOpen && q.trim() !== '' && filteredProducts.length > 0 && (
-                <div
-                  style={{
-                    position:'absolute', top:'100%', left:0, right:0,
-                    border:'1px solid #ccc', background:'#fff', zIndex:10,
-                    maxHeight:220, overflowY:'auto', borderTop:'none',
-                    borderRadius:'0 0 6px 6px', boxShadow:'0 6px 14px rgba(0,0,0,0.06)'
-                  }}
-                >
-                  {filteredProducts.map(p => (
-                    <div
-                      key={p.id}
-                      style={{padding:'10px 12px', cursor:'pointer', display:'flex', gap:12, alignItems:'center'}}
-                      onMouseDown={e => { e.preventDefault(); addProductToOrder(p.id) }}
-                    >
-                      <div style={{width:96, fontFamily:'monospace'}}>{p.sku}</div>
-                      <div style={{flex:1}}>{p.name}</div>
-                      <div style={{whiteSpace:'nowrap'}}>
-                        {(Number(p.price)||0).toLocaleString('id-ID',{style:'currency',currency:'IDR'})} / {(p.uom3_name||'PCS')}
-                      </div>
-                      <span className="btn">+ Add</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-            <div className="small" style={{marginTop:6, opacity:.7}}>
-              Price shown is per {`"${'PCS'}"`} (smallest UOM). Larger UOM prices are calculated by conversion.
-            </div>
-          </div>
-
-          {/* Order items with UOM selection */}
-          <div className="card" style={{marginTop:12, padding:0}}>
+          {/* Order items with larger UOM / Qty on mobile */}
+          <div className="card" style={{marginTop:8, padding:0}}>
             <table className="table">
               <thead>
                 <tr>
                   <th style={{width:'40%'}}>Product</th>
-                  <th style={{width:120}}>UOM</th>
-                  <th>Qty</th>
+                  <th className="col-uom">UOM</th>
+                  <th className="col-qty">Qty</th>
                   <th>Price / UOM</th>
                   <th>Line Total</th>
                   <th style={{width:80}}></th>
@@ -261,7 +282,7 @@ export default function Orders() {
                       <td>
                         {p ? (
                           <select
-                            className="input"
+                            className="input uom-select"
                             value={r.uom}
                             onChange={e=>changeUom(r.id, Number(e.target.value) as 1|2|3)}
                           >
@@ -273,9 +294,10 @@ export default function Orders() {
                       </td>
                       <td>
                         <input
-                          className="input"
+                          className="input qty-input"
                           type="number"
                           min={0}
+                          inputMode="numeric"
                           value={r.qty}
                           onChange={e=>setRows(rs=>rs.map(x=>x.id===r.id?{...x, qty:Number((e.target as HTMLInputElement).value)||0}:x))}
                         />
@@ -288,7 +310,7 @@ export default function Orders() {
                 })}
                 {rows.length === 0 && (
                   <tr><td colSpan={6} className="small" style={{opacity:.7, padding:'10px 12px'}}>
-                    No items yet. Search above and click results to add.
+                    No items yet. Search above and tap results to add.
                   </td></tr>
                 )}
               </tbody>
@@ -296,13 +318,16 @@ export default function Orders() {
           </div>
 
           <textarea className="input" placeholder="Notes" value={notes} onChange={e=>setNotes(e.target.value)} />
-          <div style={{textAlign:'right', fontWeight:600}}>
-            Subtotal: {subtotal.toLocaleString('id-ID',{style:'currency',currency:'IDR'})}
+          <div className="sticky-actions" style={{textAlign:'right'}}>
+            <div style={{fontWeight:600, marginBottom:8}}>
+              Subtotal: {subtotal.toLocaleString('id-ID',{style:'currency',currency:'IDR'})}
+            </div>
+            <button className="btn primary">Save Order</button>
           </div>
-          <button className="btn primary">Save Order</button>
         </form>
       </div>
 
+      {/* === My Orders (unchanged) === */}
       <div className="card">
         <h3>My Orders</h3>
         <table className="table">

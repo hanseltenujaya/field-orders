@@ -162,3 +162,30 @@ nav .btn{
   .card{ padding:12px }
   .btn, .input, select{ border-radius:10px }
 }
+/* ==== Mobile-first tweaks for Orders ==== */
+.col-uom { width: 120px; }
+.col-qty { width: 110px; }
+
+/* Larger tap targets for UOM & QTY on phones */
+.uom-select {
+  min-width: 120px;
+}
+
+.qty-input {
+  min-width: 110px;
+  text-align: right;
+}
+
+/* Make dropdown rows comfy to tap */
+@media (max-width: 900px){
+  .uom-select, .qty-input { height: 48px; min-height: 48px; font-size: 16px; }
+  .table th, .table td { padding: 12px 10px; }
+}
+
+/* Give product dropdown a little extra space on very small phones */
+@media (max-width: 480px){
+  .col-uom { width: 128px; }
+  .col-qty { width: 120px; }
+  .uom-select { min-width: 128px; }
+  .qty-input { min-width: 120px; }
+}
