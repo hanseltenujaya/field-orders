@@ -88,17 +88,12 @@ export default function Orders() {
     return c12 * c23 // UOM1
   }
 
-  function uomName(product: Product, uom: 1|2|3) {
-    if (uom === 1) return product.uom1_name || 'UOM1'
-    if (uom === 2) return product.uom2_name || 'UOM2'
-    return product.uom3_name || 'UOM3'
-  }
-
   function addProductToOrder(pid: number) {
     const p = byId[pid]
     if (!p) return
     const pricePerUnit = Number(p.price) || 0
     setRows(prev => {
+      // default add as UOM3; if same row exists with UOM3, bump qty
       const idx = prev.findIndex(r => r.product_id === pid && r.uom === 3)
       if (idx >= 0) {
         const next = [...prev]
@@ -109,6 +104,7 @@ export default function Orders() {
       const lineUnits = unitsPer(p, 3)
       return [...prev, { id: uuid(), product_id: pid, uom: 3, qty: 1, price: pricePerUnit * lineUnits }]
     })
+    // MOBILE: close keyboard but keep dropdown open so user can add more
     searchRef.current?.blur()
   }
 
@@ -148,6 +144,7 @@ export default function Orders() {
     }]).select().single()
     if (e1) return alert(e1.message)
 
+    // payload with uom_level + qty_base (pcs)
     const payload = rows.map(r => {
       const p = byId[r.product_id!]
       const per = unitsPer(p, r.uom)
@@ -171,23 +168,28 @@ export default function Orders() {
 
   return (
     <div className="grid">
-      {/* === Mobile table CSS (fits Product|UOM|Qty without horizontal scroll) === */}
+      {/* === Mobile-first table tweaks (show Product+UOM+Qty first) === */}
       <style>{`
-        .cell-prod { max-width: 1px; } /* enable ellipsis shrink */
-        .ellipsis { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .cell-prod { max-width: 1px; white-space: normal; word-break: break-word; }
+        .wrap-2 { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; } /* 2-line wrap */
 
         @media (max-width: 640px) {
-          /* Hide non-essential columns on phones */
-          .col-price, .col-total { display: none; }
+          .table { table-layout: fixed; width:100%; }
+          .table th, .table td { padding: 8px 6px; }
 
-          /* Tight column widths so all 3 fit */
-          .col-prod  { width: 58%; }
-          .col-uom   { width: 22%; }
-          .col-qty   { width: 20%; }
+          /* First viewport: Product + UOM + Qty (<= 100%) */
+          .col-prod   { width: 54%; }   /* product wraps to 2 lines */
+          .col-uom    { width: 23%; }
+          .col-qty    { width: 23%; }
 
-          /* Bigger tap targets */
-          .uom-select, .qty-input { font-size: 16px; }
-          .qty-input { width: 100%; min-width: 64px; }
+          /* Offscreen to the right (scroll horizontally to see) */
+          .col-price  { width: 28%; }
+          .col-total  { width: 22%; text-align:right; }
+          .col-actions{ width: 14%; }
+
+          /* Comfortable tap targets */
+          .uom-select, .qty-input { font-size:16px; }
+          .qty-input { min-width:56px; width:100%; text-align:center; }
         }
       `}</style>
 
@@ -209,7 +211,7 @@ export default function Orders() {
             <div />
           </div>
 
-          {/* === Product Search moved HERE (directly under customer input) === */}
+          {/* === Product Search (directly under customer) === */}
           <div ref={searchBoxRef} style={{position:'relative', marginTop: 6}}>
             <label className="small" style={{display:'block', marginBottom:6}}><b>Add Products</b></label>
             <div style={{display:'flex', gap:8}}>
@@ -275,8 +277,8 @@ export default function Orders() {
             )}
           </div>
 
-          {/* Order items table */}
-          <div className="card" style={{marginTop:8, padding:0}}>
+          {/* Order items table (horizontal scroll allowed) */}
+          <div className="card" style={{marginTop:8, padding:0, overflowX:'auto'}}>
             <table className="table">
               <thead>
                 <tr>
@@ -285,7 +287,7 @@ export default function Orders() {
                   <th className="col-qty">Qty</th>
                   <th className="col-price">Price / UOM</th>
                   <th className="col-total">Line Total</th>
-                  <th style={{width:80}}></th>
+                  <th className="col-actions"></th>
                 </tr>
               </thead>
               <tbody>
@@ -297,9 +299,7 @@ export default function Orders() {
                   return (
                     <tr key={r.id}>
                       <td className="cell-prod">
-                        {p
-                          ? <div className="ellipsis">{p.sku} — {p.name}</div>
-                          : <i className="small">Not selected</i>}
+                        {p ? <div className="wrap-2">{p.sku} — {p.name}</div> : <i className="small">Not selected</i>}
                       </td>
                       <td>
                         {p ? (
@@ -326,7 +326,7 @@ export default function Orders() {
                       </td>
                       <td className="col-price">{r.price.toLocaleString('id-ID',{style:'currency',currency:'IDR'})}</td>
                       <td className="col-total">{(r.qty*r.price).toLocaleString('id-ID',{style:'currency',currency:'IDR'})}</td>
-                      <td><button type="button" className="btn" onClick={()=>removeRow(r.id)}>✕</button></td>
+                      <td className="col-actions"><button type="button" className="btn" onClick={()=>removeRow(r.id)}>✕</button></td>
                     </tr>
                   )
                 })}
