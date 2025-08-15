@@ -175,6 +175,7 @@ export default function Customers({ isAdmin = false }: { isAdmin?: boolean }) {
   /* ------------------------ Create customer ------------------------ */
 
   async function createCustomer() {
+    if (!isAdmin) return
     if (!cName.trim()) return alert('Name is required')
     const payload = {
       name: cName.trim(),
@@ -219,6 +220,7 @@ export default function Customers({ isAdmin = false }: { isAdmin?: boolean }) {
   /* ------------------------ Import from Excel ----------------------- */
 
   async function handleFile(f: File | null) {
+    if (!isAdmin) return
     setImportErr(null)
     setImportRows([])
     if (!f) return
@@ -264,6 +266,7 @@ export default function Customers({ isAdmin = false }: { isAdmin?: boolean }) {
   }
 
   async function importCommit() {
+    if (!isAdmin) return
     if (importRows.length === 0) return
     setImporting(true)
     try {
@@ -302,10 +305,12 @@ export default function Customers({ isAdmin = false }: { isAdmin?: boolean }) {
       <div className="card">
         <h3 style={{display:'flex', justifyContent:'space-between', alignItems:'center', gap:8}}>
           <span>Customers</span>
-          <span style={{display:'flex', gap:8}}>
-            <button className="btn" onClick={()=>setOpenImport(true)}>Import (.xlsx / .csv)</button>
-            <button className="btn primary" onClick={()=>setOpenCreate(true)}>+ New Customer</button>
-          </span>
+          {isAdmin && (
+            <span style={{display:'flex', gap:8}}>
+              <button className="btn" onClick={()=>setOpenImport(true)}>Import (.xlsx / .csv)</button>
+              <button className="btn primary" onClick={()=>setOpenCreate(true)}>+ New Customer</button>
+            </span>
+          )}
         </h3>
 
         {/* Search (server-side) */}
