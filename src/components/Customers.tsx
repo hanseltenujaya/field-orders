@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../supabaseClient'
 
 type Branch = 'JKP' | 'BGR' | 'TGR'
@@ -18,6 +18,7 @@ type Customer = {
 /* ------------------------- small helpers ------------------------- */
 
 const BRANCHES: Branch[] = ['JKP', 'BGR', 'TGR']
+const PAGE_SIZE = 200 // server page size for list/search
 
 function toStrOrNull(v: any): string | null {
   if (v === null || v === undefined) return null
@@ -73,10 +74,14 @@ function Modal({
 /* --------------------------- Component --------------------------- */
 
 export default function Customers({ isAdmin = false }: { isAdmin?: boolean }) {
-  const [list, setList] = useState<Customer[]>([])
+  const [rows, setRows] = useState<Customer[]>([])
   const [err, setErr] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+
+  // search & pagination (server-side)
   const [q, setQ] = useState('')
+  const [canLoadMore, setCanLoadMore] = useState(false)
+  const debounce = useRef<number | null>(null)
 
   // create
   const [openCreate, setOpenCreate] = useState(false)
@@ -100,29 +105,72 @@ export default function Customers({ isAdmin = false }: { isAdmin?: boolean }) {
   const [importErr, setImportErr] = useState<string | null>(null)
   const [importing, setImporting] = useState(false)
 
-  async function load() {
-    setErr(null); setLoading(true)
-    const { data, error } = await supabase
+  /* ------------------------- Data loading ------------------------- */
+
+  async function fetchServer(term: string, offset: number) {
+    // Build the base query
+    let query = supabase
       .from('customers')
       .select('id, name, phone, address, customer_code, latitude, longitude, branch, created_at')
-      .order('created_at', { ascending: false })
-    setLoading(false)
-    if (error) setErr(error.message)
-    else setList((data as any) || [])
-  }
-  useEffect(() => { load() }, [])
+      .order(term.trim() ? 'name' : 'created_at', { ascending: term.trim() ? true : false })
 
-  const filtered = useMemo(() => {
-    const term = q.trim().toLowerCase()
-    if (!term) return list
-    return list.filter(c =>
-      (c.name || '').toLowerCase().includes(term) ||
-      (c.phone || '').toLowerCase().includes(term) ||
-      (c.address || '').toLowerCase().includes(term) ||
-      (c.customer_code || '').toLowerCase().includes(term) ||
-      (c.branch || '').toLowerCase().includes(term)
-    )
-  }, [q, list])
+    // Server-side search: match Order page behavior
+    if (term.trim()) {
+      const like = `%${term.trim()}%`
+      query = query.or(
+        [
+          `name.ilike.${like}`,
+          `address.ilike.${like}`,
+          `customer_code.ilike.${like}`,
+          `phone.ilike.${like}`
+        ].join(',')
+      )
+    }
+
+    // Pagination window
+    query = query.range(offset, offset + PAGE_SIZE - 1)
+
+    const { data, error } = await query
+    if (error) throw new Error(error.message)
+    return (data as Customer[]) || []
+  }
+
+  async function loadFirst(term: string) {
+    setLoading(true); setErr(null)
+    try {
+      const batch = await fetchServer(term, 0)
+      setRows(batch)
+      setCanLoadMore(batch.length === PAGE_SIZE)
+    } catch (e: any) {
+      setErr(e?.message || 'Failed to load customers'); setRows([]); setCanLoadMore(false)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function loadMore() {
+    if (!canLoadMore || loading) return
+    setLoading(true); setErr(null)
+    try {
+      const batch = await fetchServer(q, rows.length)
+      setRows(prev => [...prev, ...batch])
+      setCanLoadMore(batch.length === PAGE_SIZE)
+    } catch (e: any) {
+      setErr(e?.message || 'Failed to load more')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // initial load
+  useEffect(() => { loadFirst('') }, [])
+
+  // debounced search
+  function onSearchChange(v: string) {
+    setQ(v)
+    if (debounce.current) window.clearTimeout(debounce.current)
+    debounce.current = window.setTimeout(() => loadFirst(v), 250)
+  }
 
   /* ------------------------ Create customer ------------------------ */
 
@@ -141,7 +189,7 @@ export default function Customers({ isAdmin = false }: { isAdmin?: boolean }) {
     if (error) return alert(error.message)
     setOpenCreate(false)
     setCName(''); setCPhone(''); setCAddress(''); setCCode(''); setCLat(''); setCLng(''); setCBranch('JKP')
-    await load()
+    await loadFirst(q)
   }
 
   /* ------------------------- Edit customer ------------------------- */
@@ -165,7 +213,7 @@ export default function Customers({ isAdmin = false }: { isAdmin?: boolean }) {
     const { error } = await supabase.from('customers').update(payload).eq('id', editing.id)
     if (error) return alert(error.message)
     setEditing(null)
-    await load()
+    await loadFirst(q)
   }
 
   /* ------------------------ Import from Excel ----------------------- */
@@ -178,7 +226,6 @@ export default function Customers({ isAdmin = false }: { isAdmin?: boolean }) {
     try {
       // dynamic import; requires `npm i xlsx`
       const XLSX = await import('xlsx')
-
       const buf = await f.arrayBuffer()
       const wb = XLSX.read(buf)
       const ws = wb.Sheets[wb.SheetNames[0]]
@@ -229,7 +276,7 @@ export default function Customers({ isAdmin = false }: { isAdmin?: boolean }) {
       }
       setOpenImport(false)
       setImportRows([])
-      await load()
+      await loadFirst(q)
       alert('Import complete!')
     } catch (e: any) {
       alert(e?.message || 'Import failed')
@@ -239,6 +286,16 @@ export default function Customers({ isAdmin = false }: { isAdmin?: boolean }) {
   }
 
   /* ------------------------------- UI ------------------------------ */
+
+  const emptyMsg = useMemo(() => {
+    if (loading) return ''
+    if (rows.length === 0) {
+      return q.trim()
+        ? `No customers found for “${q.trim()}”.`
+        : 'No customers found.'
+    }
+    return ''
+  }, [loading, rows.length, q])
 
   return (
     <div className="grid">
@@ -251,21 +308,26 @@ export default function Customers({ isAdmin = false }: { isAdmin?: boolean }) {
           </span>
         </h3>
 
-        {/* Search */}
+        {/* Search (server-side) */}
         <div style={{display:'flex', gap:8, marginBottom:12}}>
           <input
             className="input"
-            placeholder="Search by name, phone, address, branch, or customer code..."
+            placeholder="Search by name, phone, address, or customer code…"
             value={q}
-            onChange={e=>setQ(e.target.value)}
+            onChange={e=>onSearchChange(e.target.value)}
             style={{flex:1}}
           />
-          <button className="btn" onClick={()=>setQ('')}>Clear</button>
+          <button
+            className="btn"
+            onClick={()=>{ setQ(''); loadFirst('') }}
+          >
+            Clear
+          </button>
         </div>
 
-        {err && <div className="small" style={{color:'#a00'}}>Error: {err}</div>}
+        {err && <div className="small" style={{color:'#a00', marginBottom:8}}>Error: {err}</div>}
 
-        {loading ? 'Loading…' : (
+        <div className="card" style={{padding:0, overflowX:'auto'}}>
           <table className="table">
             <thead>
               <tr>
@@ -281,7 +343,15 @@ export default function Customers({ isAdmin = false }: { isAdmin?: boolean }) {
               </tr>
             </thead>
             <tbody>
-              {filtered.map(c => (
+              {loading && (
+                <tr><td colSpan={9} className="small">Loading…</td></tr>
+              )}
+
+              {!loading && rows.length === 0 && (
+                <tr><td colSpan={9} className="small">{emptyMsg}</td></tr>
+              )}
+
+              {rows.map(c => (
                 <tr key={c.id}>
                   <td className="small">{c.id}</td>
                   <td>{c.customer_code || '-'}</td>
@@ -299,12 +369,15 @@ export default function Customers({ isAdmin = false }: { isAdmin?: boolean }) {
                   </td>
                 </tr>
               ))}
-              {filtered.length === 0 && !loading && (
-                <tr><td colSpan={9} className="small">No customers found.</td></tr>
-              )}
             </tbody>
           </table>
-        )}
+
+          {!loading && canLoadMore && (
+            <div style={{padding:12}}>
+              <button className="btn" onClick={loadMore}>Load more</button>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Create Modal */}
