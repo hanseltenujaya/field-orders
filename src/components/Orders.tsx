@@ -311,11 +311,11 @@ export default function Orders() {
     .myorders { table-layout: fixed; width: 100%; }
     .myorders th, .myorders td { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .myorders .c-id { width: 56px; }
-    .myorders .c-date { width: 7.6rem; }
+    .myorders .c-date { width: 6rem; }
     .myorders .c-cust { width: auto; }
-    .myorders .c-status { display: none; } /* hide if tight */
-    .myorders .c-total { width: 7.6rem; text-align: right; }
-    .myorders .c-act { width: 70px; }
+    .myorders .c-status { width: 6rem; }
+    .myorders .c-total { width: 6rem; text-align: right; }
+    .myorders .c-act { width: 60px; }
   }
 `}</style>
 
