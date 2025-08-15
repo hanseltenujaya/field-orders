@@ -195,9 +195,12 @@ export default function Orders() {
     setRows(prev => prev.map(r => {
       if (r.id !== rowId || !r.product_id) return r
       const p = byId[r.product_id]
-      const lineUnits = unitsPer(p, u)
       const pricePerPCS = pricePerPCSFromUOM1(p)
-      return { ...r, uom: u, price: pricePerPCS * lineUnits }
+      const currentUnits = unitsPer(p, r.uom)
+      const baseQty = r.qty * currentUnits
+      const newUnits = unitsPer(p, u)
+      const newQty = baseQty / newUnits
+      return { ...r, uom: u, qty: newQty, price: pricePerPCS * newUnits }
     }))
   }
 
