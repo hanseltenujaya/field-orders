@@ -6,13 +6,25 @@ type Role = 'sales' | 'admin'
 
 type Profile = {
   id: string
-  full_name: string | null
+  full_name: string
   role: Role
   branch: Branch
 }
 
 const BRANCHES: Branch[] = ['JKP', 'BGR', 'TGR']
 const ROLES: Role[] = ['sales', 'admin']
+
+function normalizeProfile(r: any): Profile {
+  const role: Role = r?.role === 'admin' ? 'admin' : 'sales'
+  const branch: Branch =
+    r?.branch === 'BGR' ? 'BGR' : r?.branch === 'TGR' ? 'TGR' : 'JKP'
+  return {
+    id: String(r.id),
+    full_name: r?.full_name ?? '',
+    role,
+    branch,
+  }
+}
 
 export default function Users() {
   const [rows, setRows] = useState<Profile[]>([])
@@ -26,21 +38,31 @@ export default function Users() {
     setLoading(true)
     const { data, error } = await supabase
       .from('profiles')
-      .select('id, full_name, role, branch')
+      .select('id, full_name, role, branch, created_at')
       .order('created_at', { ascending: true })
+
     setLoading(false)
     if (error) return setErr(error.message)
-    setRows((data as any) || [])
+
+    const normalized = (data ?? []).map(normalizeProfile)
+    setRows(normalized)
   }
 
   useEffect(() => { load() }, [])
 
   async function saveRow(p: Profile) {
     setSavingId(p.id)
+    const payload = {
+      id: p.id,
+      full_name: p.full_name?.trim() || null,
+      role: p.role,
+      branch: p.branch,
+    }
+    // upsert creates the row if missing, updates if exists
     const { error } = await supabase
       .from('profiles')
-      .update({ full_name: p.full_name, role: p.role, branch: p.branch })
-      .eq('id', p.id)
+      .upsert([payload], { onConflict: 'id' })
+
     setSavingId(null)
     if (error) return alert(error.message)
     await load()
@@ -48,7 +70,7 @@ export default function Users() {
 
   const filtered = rows.filter(r => {
     if (!q.trim()) return true
-    const hay = `${r.full_name ?? ''} ${r.role} ${r.branch} ${r.id}`.toLowerCase()
+    const hay = `${r.full_name} ${r.role} ${r.branch} ${r.id}`.toLowerCase()
     return hay.includes(q.toLowerCase())
   })
 
@@ -95,7 +117,7 @@ export default function Users() {
                   <td>
                     <input
                       className="input"
-                      value={p.full_name ?? ''}
+                      value={p.full_name}
                       onChange={e => setRows(xs => xs.map((x,i)=> i===idx ? {...x, full_name: e.target.value} : x))}
                     />
                   </td>
@@ -130,7 +152,9 @@ export default function Users() {
               ))}
               {!loading && filtered.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="small">No users found. Ask the salesperson to sign up first, then assign their Branch & Role here.</td>
+                  <td colSpan={5} className="small">
+                    No users found. Ask the salesperson to sign up first, then assign their Branch & Role here.
+                  </td>
                 </tr>
               )}
             </tbody>
