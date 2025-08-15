@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../supabaseClient'
 
 type Branch = 'JKP' | 'BGR' | 'TGR'
@@ -15,21 +15,90 @@ type Customer = {
   created_at: string
 }
 
+/* ------------------------- small helpers ------------------------- */
+
+const BRANCHES: Branch[] = ['JKP', 'BGR', 'TGR']
+
+function toStrOrNull(v: any): string | null {
+  if (v === null || v === undefined) return null
+  const s = String(v).trim()
+  return s === '' ? null : s
+}
+
+function toNumOrNull(v: any): number | null {
+  if (v === null || v === undefined) return null
+  const s = String(v).trim()
+  if (s === '') return null
+  const n = Number(s)
+  return Number.isFinite(n) ? n : null
+}
+
+function asBranch(v: any): Branch {
+  const s = String(v || '').toUpperCase().trim()
+  return (['JKP', 'BGR', 'TGR'].includes(s) ? s : 'JKP') as Branch
+}
+
+/* ----------------------------- Modal ----------------------------- */
+
+function Modal({
+  open, onClose, title, children, footer
+}: {
+  open: boolean
+  onClose: () => void
+  title: string
+  children: React.ReactNode
+  footer?: React.ReactNode
+}) {
+  if (!open) return null
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position:'fixed', inset:0, background:'rgba(0,0,0,0.35)',
+        display:'flex', alignItems:'center', justifyContent:'center', padding:16, zIndex:9999
+      }}
+    >
+      <div className="card" onClick={e=>e.stopPropagation()} style={{width:'min(900px,95vw)', maxHeight:'90vh', overflow:'auto'}}>
+        <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8}}>
+          <h3 style={{margin:0}}>{title}</h3>
+          <button className="btn" onClick={onClose}>Close</button>
+        </div>
+        {children}
+        {footer && <div style={{display:'flex', justifyContent:'flex-end', gap:8, marginTop:12}}>{footer}</div>}
+      </div>
+    </div>
+  )
+}
+
+/* --------------------------- Component --------------------------- */
+
 export default function Customers({ isAdmin = false }: { isAdmin?: boolean }) {
   const [list, setList] = useState<Customer[]>([])
   const [err, setErr] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [q, setQ] = useState('')
 
-  // Add form state
-  const [name, setName] = useState('')
-  const [phone, setPhone] = useState('')
-  const [address, setAddress] = useState('')
-  const [customerCode, setCustomerCode] = useState('')
-  const [lat, setLat] = useState<string>('')   // keep as string for input
-  const [lng, setLng] = useState<string>('')
+  // create
+  const [openCreate, setOpenCreate] = useState(false)
+  const [cName, setCName] = useState('')
+  const [cPhone, setCPhone] = useState('')
+  const [cAddress, setCAddress] = useState('')
+  const [cCode, setCCode] = useState('')
+  const [cLat, setCLat] = useState<string>('')   // keep as string in inputs
+  const [cLng, setCLng] = useState<string>('')
+  const [cBranch, setCBranch] = useState<Branch>('JKP')
 
-  // Edit state
+  // edit
   const [editing, setEditing] = useState<Customer | null>(null)
+
+  // view
+  const [viewing, setViewing] = useState<Customer | null>(null)
+
+  // import
+  const [openImport, setOpenImport] = useState(false)
+  const [importRows, setImportRows] = useState<Partial<Customer>[]>([])
+  const [importErr, setImportErr] = useState<string | null>(null)
+  const [importing, setImporting] = useState(false)
 
   async function load() {
     setErr(null); setLoading(true)
@@ -41,145 +110,334 @@ export default function Customers({ isAdmin = false }: { isAdmin?: boolean }) {
     if (error) setErr(error.message)
     else setList((data as any) || [])
   }
-
   useEffect(() => { load() }, [])
 
-  // Create new customer
-  async function addCustomer() {
-    if (!name.trim()) return alert('Name is required')
-    const latNum = lat.trim() === '' ? null : Number(lat)
-    const lngNum = lng.trim() === '' ? null : Number(lng)
-    if (latNum !== null && (isNaN(latNum) || latNum < -90 || latNum > 90)) return alert('Latitude must be between -90 and 90')
-    if (lngNum !== null && (isNaN(lngNum) || lngNum < -180 || lngNum > 180)) return alert('Longitude must be between -180 and 180')
+  const filtered = useMemo(() => {
+    const term = q.trim().toLowerCase()
+    if (!term) return list
+    return list.filter(c =>
+      (c.name || '').toLowerCase().includes(term) ||
+      (c.phone || '').toLowerCase().includes(term) ||
+      (c.address || '').toLowerCase().includes(term) ||
+      (c.customer_code || '').toLowerCase().includes(term) ||
+      (c.branch || '').toLowerCase().includes(term)
+    )
+  }, [q, list])
 
+  /* ------------------------ Create customer ------------------------ */
+
+  async function createCustomer() {
+    if (!cName.trim()) return alert('Name is required')
     const payload = {
-      name: name.trim(),
-      phone: phone.trim() || null,
-      address: address.trim() || null,
-      customer_code: customerCode.trim() || null,
-      latitude: latNum,
-      longitude: lngNum,
+      name: cName.trim(),
+      phone: toStrOrNull(cPhone),
+      address: toStrOrNull(cAddress),
+      customer_code: toStrOrNull(cCode),
+      latitude: toNumOrNull(cLat),
+      longitude: toNumOrNull(cLng),
+      branch: cBranch
     }
-
     const { error } = await supabase.from('customers').insert([payload])
     if (error) return alert(error.message)
-
-    // reset form
-    setName(''); setPhone(''); setAddress(''); setCustomerCode(''); setLat(''); setLng('')
+    setOpenCreate(false)
+    setCName(''); setCPhone(''); setCAddress(''); setCCode(''); setCLat(''); setCLng(''); setCBranch('JKP')
     await load()
   }
 
-  // Start edit
+  /* ------------------------- Edit customer ------------------------- */
+
   function startEdit(c: Customer) {
     if (!isAdmin) return
     setEditing(c)
   }
 
-  // Save edit (admin only)
   async function saveEdit() {
     if (!editing) return
-    const latNum = editing.latitude
-    const lngNum = editing.longitude
-    if (latNum !== null && (isNaN(latNum) || latNum < -90 || latNum > 90)) return alert('Latitude must be between -90 and 90')
-    if (lngNum !== null && (isNaN(lngNum) || lngNum < -180 || lngNum > 180)) return alert('Longitude must be between -180 and 180')
-
-    const { error } = await supabase.from('customers').update({
+    const payload = {
       name: editing.name?.trim(),
-      phone: editing.phone?.trim() || null,
-      address: editing.address?.trim() || null,
-      customer_code: editing.customer_code?.trim() || null,
-      latitude: editing.latitude,
-      longitude: editing.longitude,
-    }).eq('id', editing.id)
-
+      phone: toStrOrNull(editing.phone),
+      address: toStrOrNull(editing.address),
+      customer_code: toStrOrNull(editing.customer_code),
+      latitude: toNumOrNull(editing.latitude),
+      longitude: toNumOrNull(editing.longitude),
+      branch: editing.branch
+    }
+    const { error } = await supabase.from('customers').update(payload).eq('id', editing.id)
     if (error) return alert(error.message)
     setEditing(null)
     await load()
   }
 
+  /* ------------------------ Import from Excel ----------------------- */
+
+  async function handleFile(f: File | null) {
+    setImportErr(null)
+    setImportRows([])
+    if (!f) return
+
+    try {
+      // dynamic import; requires `npm i xlsx`
+      const XLSX = await import('xlsx')
+
+      const buf = await f.arrayBuffer()
+      const wb = XLSX.read(buf)
+      const ws = wb.Sheets[wb.SheetNames[0]]
+      const rows: any[] = XLSX.utils.sheet_to_json(ws, { defval: '' })
+
+      // Normalize header names once (case-insensitive)
+      const norm = (s: string) => s.toLowerCase().replace(/\s+/g, '')
+      const mapHeader = (obj: any, keys: string[]) => {
+        const o: Record<string, any> = {}
+        Object.keys(obj).forEach(k => { o[norm(k)] = obj[k] })
+        for (const k of keys) { if (!(k in o)) o[k] = '' }
+        return o
+      }
+
+      const normalized = rows.map(r => mapHeader(r, [
+        'name','phone','address','customercode','latitude','longitude','branch'
+      ]))
+
+      const prepared: Partial<Customer>[] = normalized.map((r, i) => {
+        const name = toStrOrNull(r['name'])
+        return {
+          name: name || `Unnamed ${i+1}`,
+          phone: toStrOrNull(r['phone']),
+          address: toStrOrNull(r['address']),
+          customer_code: toStrOrNull(r['customercode']),
+          latitude: toNumOrNull(r['latitude']),
+          longitude: toNumOrNull(r['longitude']),
+          branch: asBranch(r['branch'])
+        }
+      })
+
+      setImportRows(prepared)
+    } catch (e: any) {
+      setImportErr(e?.message || 'Failed to read file')
+    }
+  }
+
+  async function importCommit() {
+    if (importRows.length === 0) return
+    setImporting(true)
+    try {
+      // insert in chunks to avoid payload limits
+      const CHUNK = 200
+      for (let i = 0; i < importRows.length; i += CHUNK) {
+        const slice = importRows.slice(i, i + CHUNK)
+        const { error } = await supabase.from('customers').insert(slice as any[])
+        if (error) throw new Error(error.message)
+      }
+      setOpenImport(false)
+      setImportRows([])
+      await load()
+      alert('Import complete!')
+    } catch (e: any) {
+      alert(e?.message || 'Import failed')
+    } finally {
+      setImporting(false)
+    }
+  }
+
+  /* ------------------------------- UI ------------------------------ */
+
   return (
     <div className="grid">
       <div className="card">
-        <h3>Customers</h3>
+        <h3 style={{display:'flex', justifyContent:'space-between', alignItems:'center', gap:8}}>
+          <span>Customers</span>
+          <span style={{display:'flex', gap:8}}>
+            <button className="btn" onClick={()=>setOpenImport(true)}>Import (.xlsx / .csv)</button>
+            <button className="btn primary" onClick={()=>setOpenCreate(true)}>+ New Customer</button>
+          </span>
+        </h3>
 
-        {/* Add customer */}
-        <div style={{display:'grid', gridTemplateColumns:'1fr 1fr 1fr 1fr 1fr 1fr auto', gap:8, margin:'12px 0'}}>
-          <input className="input" placeholder="Name *" value={name} onChange={e=>setName(e.target.value)} />
-          <input className="input" placeholder="Phone" value={phone} onChange={e=>setPhone(e.target.value)} />
-          <input className="input" placeholder="Address" value={address} onChange={e=>setAddress(e.target.value)} />
-          <input className="input" placeholder="Customer ID / Code" value={customerCode} onChange={e=>setCustomerCode(e.target.value)} />
-          <input className="input" placeholder="Latitude (-90..90)" value={lat} onChange={e=>setLat(e.target.value)} />
-          <input className="input" placeholder="Longitude (-180..180)" value={lng} onChange={e=>setLng(e.target.value)} />
-          <button className="btn primary" onClick={addCustomer}>Save</button>
+        {/* Search */}
+        <div style={{display:'flex', gap:8, marginBottom:12}}>
+          <input
+            className="input"
+            placeholder="Search by name, phone, address, branch, or customer code..."
+            value={q}
+            onChange={e=>setQ(e.target.value)}
+            style={{flex:1}}
+          />
+          <button className="btn" onClick={()=>setQ('')}>Clear</button>
         </div>
 
         {err && <div className="small" style={{color:'#a00'}}>Error: {err}</div>}
 
-        {/* List */}
         {loading ? 'Loading…' : (
           <table className="table">
             <thead>
               <tr>
                 <th style={{width:60}}>ID</th>
-                <th>Name</th>
-                <th>Phone</th>
-                <th>Address</th>
                 <th>Customer&nbsp;ID</th>
+                <th>Name</th>
+                <th>Address</th>
+                <th>Phone</th>
                 <th>Lat</th>
                 <th>Lng</th>
                 <th>Branch</th>
-                <th style={{width:120}}>Actions</th>
+                <th style={{width:160}}>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {list.map(c => (
+              {filtered.map(c => (
                 <tr key={c.id}>
                   <td className="small">{c.id}</td>
-                  <td>{c.name}</td>
-                  <td>{c.phone || '-'}</td>
-                  <td>{c.address || '-'}</td>
                   <td>{c.customer_code || '-'}</td>
+                  <td>{c.name}</td>
+                  <td>{c.address || '-'}</td>
+                  <td>{c.phone || '-'}</td>
                   <td>{c.latitude ?? '-'}</td>
                   <td>{c.longitude ?? '-'}</td>
                   <td>{c.branch}</td>
                   <td>
-                    {isAdmin ? (
-                      <button className="btn" onClick={()=>startEdit(c)}>Edit</button>
-                    ) : (
-                      <span className="small" style={{opacity:.6}}>—</span>
-                    )}
+                    <div style={{display:'flex', gap:6}}>
+                      {isAdmin && <button className="btn" onClick={()=>startEdit(c)}>Edit</button>}
+                      <button className="btn" onClick={()=>setViewing(c)}>View</button>
+                    </div>
                   </td>
                 </tr>
               ))}
-              {list.length === 0 && !loading && (
-                <tr><td colSpan={9} className="small">No customers yet.</td></tr>
+              {filtered.length === 0 && !loading && (
+                <tr><td colSpan={9} className="small">No customers found.</td></tr>
               )}
             </tbody>
           </table>
         )}
       </div>
 
-      {/* Inline edit panel (admin only) */}
-      {isAdmin && editing && (
-        <div className="card">
-          <h3>Edit Customer #{editing.id}</h3>
-          <div style={{display:'grid', gridTemplateColumns:'1fr 1fr 1fr 1fr 1fr 1fr auto', gap:8}}>
-            <input className="input" value={editing.name || ''} onChange={e=>setEditing({...editing, name:e.target.value})} />
-            <input className="input" value={editing.phone || ''} onChange={e=>setEditing({...editing, phone:e.target.value})} />
-            <input className="input" value={editing.address || ''} onChange={e=>setEditing({...editing, address:e.target.value})} />
-            <input className="input" value={editing.customer_code || ''} onChange={e=>setEditing({...editing, customer_code:e.target.value})} />
-            <input className="input" value={editing.latitude ?? ''} onChange={e=>setEditing({...editing, latitude: e.target.value===''? null : Number(e.target.value)})} />
-            <input className="input" value={editing.longitude ?? ''} onChange={e=>setEditing({...editing, longitude: e.target.value===''? null : Number(e.target.value)})} />
-            <div style={{display:'flex', gap:8}}>
+      {/* Create Modal */}
+      <Modal
+        open={openCreate}
+        onClose={()=>setOpenCreate(false)}
+        title="New Customer"
+        footer={
+          <>
+            <button className="btn" onClick={()=>setOpenCreate(false)}>Cancel</button>
+            <button className="btn primary" onClick={createCustomer}>Save</button>
+          </>
+        }
+      >
+        <div className="grid two" style={{gap:8}}>
+          <input className="input" placeholder="Name *" value={cName} onChange={e=>setCName(e.target.value)} />
+          <input className="input" placeholder="Phone" value={cPhone} onChange={e=>setCPhone(e.target.value)} />
+          <input className="input" placeholder="Address" value={cAddress} onChange={e=>setCAddress(e.target.value)} />
+          <input className="input" placeholder="Customer ID / Code" value={cCode} onChange={e=>setCCode(e.target.value)} />
+          <input className="input" placeholder="Latitude (-90..90)" value={cLat} onChange={e=>setCLat(e.target.value)} />
+          <input className="input" placeholder="Longitude (-180..180)" value={cLng} onChange={e=>setCLng(e.target.value)} />
+          <select className="input" value={cBranch} onChange={e=>setCBranch(e.target.value as Branch)}>
+            {BRANCHES.map(b => <option key={b} value={b}>{b}</option>)}
+          </select>
+          <div />
+        </div>
+      </Modal>
+
+      {/* Edit Modal (admin) */}
+      {isAdmin && (
+        <Modal
+          open={!!editing}
+          onClose={()=>setEditing(null)}
+          title={editing ? `Edit Customer #${editing.id}` : 'Edit Customer'}
+          footer={
+            <>
               <button className="btn" onClick={()=>setEditing(null)}>Cancel</button>
               <button className="btn primary" onClick={saveEdit}>Save</button>
+            </>
+          }
+        >
+          {!editing ? null : (
+            <div className="grid two" style={{gap:8}}>
+              <input className="input" value={editing.name || ''} onChange={e=>setEditing({...editing, name:e.target.value})} />
+              <input className="input" value={editing.phone || ''} onChange={e=>setEditing({...editing, phone:e.target.value})} />
+              <input className="input" value={editing.address || ''} onChange={e=>setEditing({...editing, address:e.target.value})} />
+              <input className="input" value={editing.customer_code || ''} onChange={e=>setEditing({...editing, customer_code:e.target.value})} />
+              <input className="input" value={editing.latitude ?? ''} onChange={e=>setEditing({...editing, latitude: toNumOrNull(e.target.value)})} />
+              <input className="input" value={editing.longitude ?? ''} onChange={e=>setEditing({...editing, longitude: toNumOrNull(e.target.value)})} />
+              <select className="input" value={editing.branch} onChange={e=>setEditing({...editing, branch: e.target.value as Branch})}>
+                {BRANCHES.map(b => <option key={b} value={b}>{b}</option>)}
+              </select>
+              <div />
             </div>
-          </div>
-          <div className="small" style={{marginTop:6, opacity:.7}}>
-            Only admins can edit customers. Latitude: -90..90, Longitude: -180..180
-          </div>
-        </div>
+          )}
+        </Modal>
       )}
+
+      {/* View Modal */}
+      <Modal
+        open={!!viewing}
+        onClose={()=>setViewing(null)}
+        title={viewing ? viewing.name : 'Customer'}
+        footer={<button className="btn" onClick={()=>setViewing(null)}>Close</button>}
+      >
+        {!viewing ? null : (
+          <div className="grid" style={{gap:8}}>
+            <div><b>Name:</b> {viewing.name}</div>
+            <div><b>Phone:</b> {viewing.phone || '-'}</div>
+            <div><b>Address:</b> {viewing.address || '-'}</div>
+            <div><b>Customer ID / Code:</b> {viewing.customer_code || '-'}</div>
+            <div className="grid two">
+              <div><b>Latitude:</b> {viewing.latitude ?? '-'}</div>
+              <div><b>Longitude:</b> {viewing.longitude ?? '-'}</div>
+            </div>
+            <div><b>Branch:</b> {viewing.branch}</div>
+            <div className="small" style={{opacity:.7}}><b>Created:</b> {new Date(viewing.created_at).toLocaleString()}</div>
+          </div>
+        )}
+      </Modal>
+
+      {/* Import Modal */}
+      <Modal
+        open={openImport}
+        onClose={()=>setOpenImport(false)}
+        title="Import Customers (.xlsx / .csv)"
+        footer={
+          <>
+            <button className="btn" onClick={()=>setOpenImport(false)}>Close</button>
+            <button className="btn primary" disabled={importRows.length===0 || importing} onClick={importCommit}>
+              {importing ? 'Importing…' : `Import ${importRows.length} row(s)`}
+            </button>
+          </>
+        }
+      >
+        <div className="grid" style={{gap:10}}>
+          <input
+            type="file"
+            accept=".xlsx,.xls,.csv"
+            onChange={e=>handleFile(e.target.files?.[0] ?? null)}
+          />
+          <div className="small" style={{opacity:.75}}>
+            Expected headers (case-insensitive): <code>name</code>, <code>phone</code>, <code>address</code>, <code>customer code</code>, <code>latitude</code>, <code>longitude</code>, <code>branch</code> (JKP/BGR/TGR).
+          </div>
+          {importErr && <div className="small" style={{color:'#a00'}}>Error: {importErr}</div>}
+          {importRows.length > 0 && (
+            <div className="card">
+              <b>Preview (first 10)</b>
+              <table className="table">
+                <thead>
+                  <tr><th>Name</th><th>Phone</th><th>Address</th><th>Code</th><th>Lat</th><th>Lng</th><th>Branch</th></tr>
+                </thead>
+                <tbody>
+                  {importRows.slice(0,10).map((r, i) => (
+                    <tr key={i}>
+                      <td>{r.name}</td>
+                      <td>{r.phone ?? '-'}</td>
+                      <td>{r.address ?? '-'}</td>
+                      <td>{r.customer_code ?? '-'}</td>
+                      <td>{r.latitude ?? '-'}</td>
+                      <td>{r.longitude ?? '-'}</td>
+                      <td>{r.branch}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <div className="small" style={{marginTop:6, opacity:.7}}>
+                Total parsed rows: <b>{importRows.length}</b>
+              </div>
+            </div>
+          )}
+        </div>
+      </Modal>
     </div>
   )
 }

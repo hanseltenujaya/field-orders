@@ -3,7 +3,9 @@ import { supabase } from '../supabaseClient'
 
 type Customer = { id:number; name:string; address?: string | null }
 type Product  = {
-  id:number; sku:string; name:string; price:number;    // price per UOM3 (PCS)
+  id:number; sku:string; name:string;
+  /** STORED AS: price per UOM1 (CTN) */
+  price:number;
   uom1_name:string|null; uom2_name:string|null; uom3_name:string|null;
   conv1_to_2:number|null; conv2_to_3:number|null;
 }
@@ -20,23 +22,20 @@ export default function Orders() {
   const [notes, setNotes] = useState('')
   const [myOrders, setMyOrders] = useState<any[]>([])
 
-  // ==== Product typeahead ====
+  // Product typeahead
   const [q, setQ] = useState('')
   const [isOpen, setIsOpen] = useState(false)
   const searchRef = useRef<HTMLInputElement>(null)
   const searchBoxRef = useRef<HTMLDivElement>(null)
 
-  // ==== Customer typeahead ====
-  const [cq, setCq] = useState('')                         // shows "Name - Address" when selected
+  // Customer typeahead
+  const [cq, setCq] = useState('')
   const [isCustOpen, setIsCustOpen] = useState(false)
   const custRef = useRef<HTMLInputElement>(null)
   const custBoxRef = useRef<HTMLDivElement>(null)
 
   useEffect(()=>{ (async()=>{
-    const c = await supabase
-      .from('customers')
-      .select('id,name,address')          // include address
-      .order('name')
+    const c = await supabase.from('customers').select('id,name,address').order('name')
     if (!c.error) setCustomers((c.data as any) || [])
 
     const p = await supabase.from('products')
@@ -49,13 +48,11 @@ export default function Orders() {
   })() }, [])
 
   async function loadMyOrders() {
-    const { data, error } = await supabase
-      .from('v_orders').select('*')
-      .order('created_at', {ascending:false})
+    const { data, error } = await supabase.from('v_orders').select('*').order('created_at', {ascending:false})
     if (!error) setMyOrders(data as any)
   }
 
-  // Close BOTH dropdowns when clicking outside
+  // Close dropdowns on outside click
   useEffect(() => {
     function handleDocMouseDown(e: MouseEvent) {
       const t = e.target as Node
@@ -84,48 +81,50 @@ export default function Orders() {
   const filteredProducts = useMemo(() => {
     const term = q.trim().toLowerCase()
     if (!term) return []
-    return products
-      .filter(p =>
-        p.name.toLowerCase().includes(term) ||
-        p.sku.toLowerCase().includes(term)
-      )
-      .slice(0, 30)
+    return products.filter(p =>
+      p.name.toLowerCase().includes(term) || p.sku.toLowerCase().includes(term)
+    ).slice(0, 30)
   }, [products, q])
 
   const filteredCustomers = useMemo(() => {
     const term = cq.trim().toLowerCase()
     if (!term) return customers.slice(0, 30)
-    return customers
-      .filter(c =>
-        c.name.toLowerCase().includes(term) ||
-        (c.address || '').toLowerCase().includes(term)
-      )
-      .slice(0, 30)
+    return customers.filter(c =>
+      c.name.toLowerCase().includes(term) || (c.address || '').toLowerCase().includes(term)
+    ).slice(0, 30)
   }, [customers, cq])
 
+  // helpers
   function unitsPer(product: Product, uom: 1|2|3) {
     const c12 = Math.max(1, product.conv1_to_2 || 1)
     const c23 = Math.max(1, product.conv2_to_3 || 1)
-    if (uom === 3) return 1
-    if (uom === 2) return c23
-    return c12 * c23 // UOM1
+    if (uom === 3) return 1           // PCS
+    if (uom === 2) return c23         // UOM2 = many PCS
+    return c12 * c23                  // UOM1 = CTN = many PCS
+  }
+  function pricePerPCSFromUOM1(p: Product) {
+    const c12 = Math.max(1, p.conv1_to_2 || 1)
+    const c23 = Math.max(1, p.conv2_to_3 || 1)
+    const uom1ToPCS = c12 * c23
+    const priceUOM1 = Number(p.price) || 0
+    return uom1ToPCS > 0 ? (priceUOM1 / uom1ToPCS) : priceUOM1
   }
 
   function addProductToOrder(pid: number) {
     const p = byId[pid]
     if (!p) return
-    const pricePerUnit = Number(p.price) || 0
+    const pricePerPCS = pricePerPCSFromUOM1(p) // derive from UOM1
     setRows(prev => {
       // default add as UOM3; if same row exists with UOM3, bump qty
       const idx = prev.findIndex(r => r.product_id === pid && r.uom === 3)
       if (idx >= 0) {
         const next = [...prev]
-        const lineUnits = unitsPer(p, 3) // 1
-        next[idx] = { ...next[idx], qty: next[idx].qty + 1, price: pricePerUnit * lineUnits }
+        const lineUnits = unitsPer(p, 3)
+        next[idx] = { ...next[idx], qty: next[idx].qty + 1, price: pricePerPCS * lineUnits }
         return next
       }
       const lineUnits = unitsPer(p, 3)
-      return [...prev, { id: uuid(), product_id: pid, uom: 3, qty: 1, price: pricePerUnit * lineUnits }]
+      return [...prev, { id: uuid(), product_id: pid, uom: 3, qty: 1, price: pricePerPCS * lineUnits }]
     })
     searchRef.current?.blur()
   }
@@ -135,19 +134,14 @@ export default function Orders() {
       if (r.id !== rowId || !r.product_id) return r
       const p = byId[r.product_id]
       const lineUnits = unitsPer(p, u)
-      const pricePerUnit = Number(p.price) || 0
-      return { ...r, uom: u, price: pricePerUnit * lineUnits }
+      const pricePerPCS = pricePerPCSFromUOM1(p)
+      return { ...r, uom: u, price: pricePerPCS * lineUnits }
     }))
   }
 
-  function removeRow(rowId: string) {
-    setRows(prev => prev.filter(r => r.id !== rowId))
-  }
+  function removeRow(rowId: string) { setRows(prev => prev.filter(r => r.id !== rowId)) }
 
-  const subtotal = useMemo(
-    () => rows.reduce((s,r)=> s + (r.qty * r.price), 0),
-    [rows]
-  )
+  const subtotal = useMemo(() => rows.reduce((s,r)=> s + (r.qty * r.price), 0), [rows])
 
   async function saveOrder(e: React.FormEvent) {
     e.preventDefault()
@@ -159,26 +153,17 @@ export default function Orders() {
     const created_by = user.data.user?.id
 
     const { data: o, error: e1 } = await supabase.from('orders').insert([{
-      customer_id: customerId,
-      created_by,
-      status: 'new',
+      customer_id: customerId, created_by, status: 'new',
       subtotal, discount:0, tax:0, total: subtotal, notes
     }]).select().single()
     if (e1) return alert(e1.message)
 
-    // payload with uom_level + qty_base (pcs)
+    // order items with base qty (PCS)
     const payload = rows.map(r => {
       const p = byId[r.product_id!]
       const per = unitsPer(p, r.uom)
       const qty_base = r.qty * per
-      return {
-        order_id: o.id,
-        product_id: r.product_id!,
-        qty: r.qty,
-        price: r.price,
-        uom_level: r.uom,
-        qty_base
-      }
+      return { order_id: o.id, product_id: r.product_id!, qty: r.qty, price: r.price, uom_level: r.uom, qty_base }
     })
     const { error: e2 } = await supabase.from('order_items').insert(payload)
     if (e2) return alert(e2.message)
@@ -190,42 +175,29 @@ export default function Orders() {
 
   return (
     <div className="grid">
-      {/* === Mobile-first table tweaks (show Product+UOM+Qty first) === */}
       <style>{`
         .cell-prod { max-width: 1px; white-space: normal; word-break: break-word; }
-        .wrap-2 { 
-          display: -webkit-box;
-          -webkit-line-clamp: 2;
-          -webkit-box-orient: vertical;
-          overflow: hidden;
-          white-space: normal;
-        }
-
+        .wrap-2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; white-space: normal; }
         @media (max-width: 640px) {
           .table { table-layout: fixed; width:100%; }
           .table th, .table td { padding: 8px 6px; }
-
           .col-prod   { width: 54%; }
           .col-uom    { width: 23%; }
           .col-qty    { width: 23%; }
-
-          /* Off-screen to the right (scroll to see) */
           .col-price  { width: 28%; }
           .col-total  { width: 22%; text-align:right; }
           .col-actions{ width: 14%; }
-
           .uom-select, .qty-input { font-size:16px; }
           .qty-input { min-width:56px; width:100%; text-align:center; }
         }
       `}</style>
 
-      {/* === Create Order Card === */}
+      {/* Create Order */}
       <div className="card">
         <h3>Create Order</h3>
 
         <form className="grid" onSubmit={saveOrder}>
-
-          {/* Customer selector (searchable; shows Name - Address) */}
+          {/* Customer selector */}
           <div className="grid two">
             <div ref={custBoxRef} style={{ position:'relative' }}>
               <label className="small" style={{ display:'block', marginBottom:6 }}><b>Customer</b></label>
@@ -241,36 +213,17 @@ export default function Orders() {
                   ref={custRef}
                   style={{ flex:1 }}
                 />
-                <button
-                  type="button"
-                  className="btn"
-                  onClick={() => {
-                    setCustomerId('');
-                    setCq('');
-                    setIsCustOpen(false);
-                    custRef.current?.blur();
-                  }}
-                >
+                <button type="button" className="btn" onClick={() => { setCustomerId(''); setCq(''); setIsCustOpen(false); custRef.current?.blur() }}>
                   Clear
                 </button>
               </div>
 
-              {/* Customer dropdown */}
               {isCustOpen && (
                 <div
                   style={{
-                    position:'absolute',
-                    top:'100%',
-                    left:0,
-                    right:0,
-                    border:'1px solid #ccc',
-                    background:'#fff',
-                    zIndex:1000,
-                    maxHeight:'40vh',
-                    overflowY:'auto',
-                    borderTop:'none',
-                    borderRadius:'0 0 10px 10px',
-                    boxShadow:'0 10px 18px rgba(0,0,0,0.08)'
+                    position:'absolute', top:'100%', left:0, right:0, border:'1px solid #ccc', background:'#fff',
+                    zIndex:1000, maxHeight:'40vh', overflowY:'auto', borderTop:'none',
+                    borderRadius:'0 0 10px 10px', boxShadow:'0 10px 18px rgba(0,0,0,0.08)'
                   }}
                 >
                   {filteredCustomers.length === 0 && (
@@ -280,13 +233,7 @@ export default function Orders() {
                     <div
                       key={c.id}
                       style={{ padding:'10px 12px', cursor:'pointer' }}
-                      onMouseDown={e => {
-                        e.preventDefault()
-                        setCustomerId(c.id)
-                        setCq(`${c.name} - ${c.address || ''}`)   // show "Name - Address"
-                        setIsCustOpen(false)
-                        custRef.current?.blur()
-                      }}
+                      onMouseDown={e => { e.preventDefault(); setCustomerId(c.id); setCq(`${c.name} - ${c.address || ''}`); setIsCustOpen(false); custRef.current?.blur() }}
                     >
                       {c.name} - {c.address || ''}
                     </div>
@@ -306,7 +253,7 @@ export default function Orders() {
             <div />
           </div>
 
-          {/* === Product Search (directly under customer) === */}
+          {/* Product Search */}
           <div ref={searchBoxRef} style={{position:'relative', marginTop: 6}}>
             <label className="small" style={{display:'block', marginBottom:6}}><b>Add Products</b></label>
             <div style={{display:'flex', gap:8}}>
@@ -321,49 +268,29 @@ export default function Orders() {
                 ref={searchRef}
                 style={{flex:1}}
               />
-              <button
-                type="button"
-                className="btn"
-                onClick={()=>{ setQ(''); setIsOpen(false); searchRef.current?.blur() }}
-              >
+              <button type="button" className="btn" onClick={()=>{ setQ(''); setIsOpen(false); searchRef.current?.blur() }}>
                 Clear
               </button>
             </div>
 
-            {/* Floating product dropdown */}
             {isOpen && q.trim() !== '' && filteredProducts.length > 0 && (
               <div
                 style={{
-                  position:'absolute',
-                  top:'100%',
-                  left:0,
-                  right:0,
-                  border:'1px solid #ccc',
-                  background:'#fff',
-                  zIndex:1000,
-                  maxHeight: '50vh',
-                  overflowY:'auto',
-                  borderTop:'none',
-                  borderRadius:'0 0 10px 10px',
-                  boxShadow:'0 10px 18px rgba(0,0,0,0.08)'
+                  position:'absolute', top:'100%', left:0, right:0, border:'1px solid #ccc', background:'#fff',
+                  zIndex:1000, maxHeight: '50vh', overflowY:'auto', borderTop:'none',
+                  borderRadius:'0 0 10px 10px', boxShadow:'0 10px 18px rgba(0,0,0,0.08)'
                 }}
               >
                 {filteredProducts.map(p => (
                   <div
                     key={p.id}
-                    style={{
-                      padding:'12px 14px',
-                      cursor:'pointer',
-                      display:'flex',
-                      gap:12,
-                      alignItems:'center'
-                    }}
+                    style={{ padding:'12px 14px', cursor:'pointer', display:'flex', gap:12, alignItems:'center' }}
                     onMouseDown={e => { e.preventDefault(); addProductToOrder(p.id) }}
                   >
                     <div style={{width:100, fontFamily:'monospace'}}>{p.sku}</div>
                     <div style={{flex:1}}>{p.name}</div>
                     <div style={{whiteSpace:'nowrap'}}>
-                      {(Number(p.price)||0).toLocaleString('id-ID',{style:'currency',currency:'IDR'})} / {(p.uom3_name||'PCS')}
+                      {(Number(p.price)||0).toLocaleString('id-ID',{style:'currency',currency:'IDR'})} / {(p.uom1_name||'CTN')}
                     </div>
                     <span className="btn">+ Add</span>
                   </div>
@@ -372,7 +299,7 @@ export default function Orders() {
             )}
           </div>
 
-          {/* Order items table (horizontal scroll allowed) */}
+          {/* Items table */}
           <div className="card" style={{marginTop:8, padding:0, overflowX:'auto'}}>
             <table className="table">
               <thead>
@@ -393,16 +320,10 @@ export default function Orders() {
                   const u3 = p?.uom3_name || 'UOM3'
                   return (
                     <tr key={r.id}>
-                      <td className="cell-prod">
-                        {p ? <div className="wrap-2">{p.sku} — {p.name}</div> : <i className="small">Not selected</i>}
-                      </td>
+                      <td className="cell-prod">{p ? <div className="wrap-2">{p.sku} — {p.name}</div> : <i className="small">Not selected</i>}</td>
                       <td>
                         {p ? (
-                          <select
-                            className="input uom-select"
-                            value={r.uom}
-                            onChange={e=>changeUom(r.id, Number(e.target.value) as 1|2|3)}
-                          >
+                          <select className="input uom-select" value={r.uom} onChange={e=>changeUom(r.id, Number(e.target.value) as 1|2|3)}>
                             <option value={1}>{u1}</option>
                             <option value={2}>{u2}</option>
                             <option value={3}>{u3}</option>
@@ -412,9 +333,7 @@ export default function Orders() {
                       <td>
                         <input
                           className="input qty-input"
-                          type="number"
-                          min={0}
-                          inputMode="numeric"
+                          type="number" min={0} inputMode="numeric"
                           value={r.qty}
                           onChange={e=>setRows(rs=>rs.map(x=>x.id===r.id?{...x, qty:Number((e.target as HTMLInputElement).value)||0}:x))}
                         />
@@ -426,9 +345,7 @@ export default function Orders() {
                   )
                 })}
                 {rows.length === 0 && (
-                  <tr><td colSpan={6} className="small" style={{opacity:.7, padding:'10px 12px'}}>
-                    No items yet. Search above and tap results to add.
-                  </td></tr>
+                  <tr><td colSpan={6} className="small" style={{opacity:.7, padding:'10px 12px'}}>No items yet. Search above and tap results to add.</td></tr>
                 )}
               </tbody>
             </table>
@@ -436,15 +353,13 @@ export default function Orders() {
 
           <textarea className="input" placeholder="Notes" value={notes} onChange={e=>setNotes(e.target.value)} />
           <div className="sticky-actions" style={{textAlign:'right'}}>
-            <div style={{fontWeight:600, marginBottom:8}}>
-              Subtotal: {subtotal.toLocaleString('id-ID',{style:'currency',currency:'IDR'})}
-            </div>
+            <div style={{fontWeight:600, marginBottom:8}}>Subtotal: {subtotal.toLocaleString('id-ID',{style:'currency',currency:'IDR'})}</div>
             <button className="btn primary">Save Order</button>
           </div>
         </form>
       </div>
 
-      {/* === My Orders (unchanged) === */}
+      {/* My Orders */}
       <div className="card">
         <h3>My Orders</h3>
         <table className="table">
@@ -455,7 +370,7 @@ export default function Orders() {
                 <td>{o.id}</td>
                 <td>{new Date(o.created_at).toLocaleString()}</td>
                 <td>{o.customer_name}</td>
-                <td className="status">{o.status}</td>
+                <td style={{ fontWeight: 400 }}>{o.status}</td>
                 <td>{Number(o.total).toLocaleString('id-ID',{style:'currency',currency:'IDR'})}</td>
               </tr>
             ))}

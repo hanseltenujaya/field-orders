@@ -363,7 +363,7 @@ export default function AdminBoard() {
                   <td>#{o.id}</td>
                   <td>{new Date(o.created_at).toLocaleString()}</td>
                   <td>{o.customer_name}</td>
-                  <td className="status" style={{textTransform:'capitalize'}}>{o.status}</td>
+                  <td style={{ textTransform: 'capitalize', fontWeight: 400 }}>{o.status}</td>
                   <td>{Number(o.total).toLocaleString('id-ID', { style: 'currency', currency: 'IDR' })}</td>
                   <td>
                     <button className="btn" onClick={() => openDetail(o.id)}>View</button>
@@ -445,8 +445,8 @@ export default function AdminBoard() {
                 {detail.history.map(h => (
                   <tr key={h.id}>
                     <td>{new Date(h.changed_at).toLocaleString()}</td>
-                    <td className="status">{h.from_status ?? '—'}</td>
-                    <td className="status">{h.to_status}</td>
+                    <td style={{ textTransform: 'capitalize', fontWeight: 400 }}>{h.from_status ?? '—'}</td>
+                    <td style={{ textTransform: 'capitalize', fontWeight: 400 }}>{h.to_status}</td>
                   </tr>
                 ))}
                 {detail.history.length === 0 && <tr><td colSpan={3} className="small">No history yet.</td></tr>}
