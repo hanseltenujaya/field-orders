@@ -16,13 +16,18 @@ type MyOrder = { id:number; created_at:string; customer_name:string; status:stri
 
 function uuid() { return Math.random().toString(36).slice(2) + Date.now().toString(36) }
 async function getUid() { const { data } = await supabase.auth.getUser(); return data.user?.id ?? null }
-function shortDate(ts: string) {
+function formatDate(ts: string) {
   const d = new Date(ts)
-  const dd = String(d.getDate()).padStart(2,'0')
-  const mm = String(d.getMonth()+1).padStart(2,'0')
-  const hh = String(d.getHours()).padStart(2,'0')
-  const mi = String(d.getMinutes()).padStart(2,'0')
-  return `${dd}/${mm} ${hh}:${mi}`
+  const dd = String(d.getDate()).padStart(2, '0')
+  const mm = String(d.getMonth() + 1).padStart(2, '0')
+  return `${dd}/${mm}`
+}
+
+function formatTime(ts: string) {
+  const d = new Date(ts)
+  const hh = String(d.getHours()).padStart(2, '0')
+  const mi = String(d.getMinutes()).padStart(2, '0')
+  return `${hh}:${mi}`
 }
 
 /** Minimal modal */
@@ -292,6 +297,8 @@ export default function Orders() {
   .cell-prod { max-width: 1px; white-space: normal; word-break: break-word; }
   .wrap-2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; white-space: normal; }
   .nowrap { white-space: nowrap; }
+  .myorders .order-time { margin-left: 4px; }
+  @media (max-width: 720px){ .myorders .order-time { display: none; } }
 
   @media (max-width: 640px) {
     .table { table-layout: fixed; width:100%; }
@@ -501,7 +508,9 @@ export default function Orders() {
             {myOrders.map(o => (
               <tr key={o.id}>
                 <td>#{o.id}</td>
-                <td className="nowrap">{shortDate(o.created_at)}</td>
+                <td className="nowrap">
+                  {formatDate(o.created_at)}<span className="order-time">{formatTime(o.created_at)}</span>
+                </td>
                 <td>{o.customer_name}</td>
                 <td className="c-status" style={{ fontWeight: 400 }}>{o.status}</td>
                 <td className="c-total">{Number(o.total).toLocaleString('id-ID',{style:'currency',currency:'IDR'})}</td>
