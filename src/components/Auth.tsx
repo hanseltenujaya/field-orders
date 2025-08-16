@@ -9,9 +9,9 @@ export default function Auth() {
   const [mode, setMode] = useState<'signin'|'signup'|'reset'|'update'>('signin')
   const [msg, setMsg] = useState<string | null>(null)
 
-    const appUrl = import.meta.env.VITE_APP_URL
-  if (!appUrl) {
-    throw new Error(
+  const appUrl = import.meta.env.VITE_APP_URL || window.location.origin
+  if (!import.meta.env.VITE_APP_URL) {
+    console.warn(
       'Missing VITE_APP_URL. Set it in your .env (local) and in Vercel → Project → Settings → Environment Variables.'
     )
   }
