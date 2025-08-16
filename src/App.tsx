@@ -22,20 +22,24 @@ type Tab = 'sales' | 'admin' | 'customers' | 'products' | 'users' | 'about'
 export default function App() {
   const [session, setSession] = useState<any>(null)
   const [tab, setTab] = useState<Tab>('sales')
-  const [recovering, setRecovering] = useState(false)
-
+  const [recovering, setRecovering] = useState(() =>
+    window.location.hash.includes('type=recovery')
+  )
   const [profile, setProfile] = useState<MyProfile | null>(null)
   const [profileErr, setProfileErr] = useState<string | null>(null)
   const [loadingProfile, setLoadingProfile] = useState<boolean>(true)
 
   // Keep Supabase session in state
   useEffect(() => {
+    if (window.location.hash.includes('type=recovery')) {
+      setRecovering(true)
+    }
     let unsub: (() => void) | undefined
 
     supabase.auth.getSession().then(({ data }) => setSession(data.session))
     const { data: sub } = supabase.auth.onAuthStateChange((event, sess) => {
       setSession(sess)
-      setRecovering(event === 'PASSWORD_RECOVERY')
+      if (event === 'PASSWORD_RECOVERY') setRecovering(true)
     })
     unsub = () => sub?.subscription?.unsubscribe()
 
