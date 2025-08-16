@@ -32,7 +32,7 @@ export default function App() {
     let unsub: (() => void) | undefined
 
     supabase.auth.getSession().then(({ data }) => setSession(data.session))
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, sess) => {
+    const { data: sub } = supabase.auth.onAuthStateChange((event, sess) => {
       setSession(sess)
     })
     unsub = () => sub?.subscription?.unsubscribe()
