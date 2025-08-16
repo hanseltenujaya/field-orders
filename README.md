@@ -66,6 +66,9 @@ This is a ready-to-run starter you can use without coding experience. Follow the
    ```
 4. Refresh the app. The admin user will see the **Admin** section.
 
+#### Forgot Password
+If a user forgets their password, they can click the **"Forgot password?"** link on the login screen to receive a reset email. After following the link in the email, they will be prompted to set a new password within the app.
+
 ### 8) Try the flows
 - **Sales user:** Login, add a customer, add a product (if allowed), create an order (status defaults to `received`). See “My Orders” list.
 - **Admin user:** Login as admin, go to **Admin** page, see all orders, change status (history is saved).

@@ -9,6 +9,13 @@ export default function Auth() {
   const [mode, setMode] = useState<'signin'|'signup'|'reset'|'update'>('signin')
   const [msg, setMsg] = useState<string | null>(null)
 
+    const appUrl = import.meta.env.VITE_APP_URL
+  if (!appUrl) {
+    throw new Error(
+      'Missing VITE_APP_URL. Set it in your .env (local) and in Vercel → Project → Settings → Environment Variables.'
+    )
+  }
+
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
       if (event === 'PASSWORD_RECOVERY') {
@@ -43,7 +50,7 @@ export default function Auth() {
     setMsg(null)
     setLoading(true)
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin })
+      const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: appUrl })
       if (error) throw error
       setMsg('Check your email for the password reset link.')
     } catch (e:any) {
