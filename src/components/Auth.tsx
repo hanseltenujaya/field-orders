@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from 'react'
 import { supabase } from '../supabaseClient'
 
-export default function Auth() {
+export default function Auth({ recovering = false }: { recovering?: boolean }) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [loading, setLoading] = useState(false)
-  const [mode, setMode] = useState<'signin'|'signup'|'reset'|'update'>('signin')
+  const initialMode = recovering || window.location.hash.includes('type=recovery') ? 'update' : 'signin'
+  const [mode, setMode] = useState<'signin'|'signup'|'reset'|'update'>(initialMode)
   const [msg, setMsg] = useState<string | null>(null)
 
   const appUrl = import.meta.env.VITE_APP_URL || window.location.origin
@@ -17,13 +18,8 @@ export default function Auth() {
   }
 
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
-      if (event === 'PASSWORD_RECOVERY') {
-        setMode('update')
-      }
-    })
-    return () => subscription.unsubscribe()
-  }, [])
+      if (recovering) setMode('update')
+  }, [recovering])
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()

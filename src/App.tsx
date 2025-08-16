@@ -22,6 +22,7 @@ type Tab = 'sales' | 'admin' | 'customers' | 'products' | 'users' | 'about'
 export default function App() {
   const [session, setSession] = useState<any>(null)
   const [tab, setTab] = useState<Tab>('sales')
+  const [recovering, setRecovering] = useState(false)
 
   const [profile, setProfile] = useState<MyProfile | null>(null)
   const [profileErr, setProfileErr] = useState<string | null>(null)
@@ -34,6 +35,7 @@ export default function App() {
     supabase.auth.getSession().then(({ data }) => setSession(data.session))
     const { data: sub } = supabase.auth.onAuthStateChange((event, sess) => {
       setSession(sess)
+      setRecovering(event === 'PASSWORD_RECOVERY')
     })
     unsub = () => sub?.subscription?.unsubscribe()
 
@@ -111,7 +113,7 @@ export default function App() {
     })()
   }, [session])
 
-  if (!session) return <Auth />
+  if (!session || recovering) return <Auth recovering={recovering} />
 
   async function signOut() {
     await supabase.auth.signOut()
