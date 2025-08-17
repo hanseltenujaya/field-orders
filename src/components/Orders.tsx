@@ -251,7 +251,7 @@ export default function Orders() {
       alert(e2.message); return
     }
 
-    setRows([]); setNotes(''); setQ(''); setIsOpen(false); setCustomerId(''); setCq(''); setPaymentTerms('CASH')
+    setRows([]); setNotes(''); setQ(''); setIsOpen(false); setCustomerId(''); setCq(''); setPaymentTerms('')
     await loadMyOrders()
     alert('Order saved')
   }
