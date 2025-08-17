@@ -50,6 +50,7 @@ export default function Orders() {
   const [customerId, setCustomerId]= useState<number|''>('')
   const [rows, setRows] = useState<OrderRow[]>([])
   const [notes, setNotes] = useState('')
+  const [paymentTerms, setPaymentTerms] = useState<'CASH' | 'CREDIT'>('CASH')
 
   // my orders
   const [myOrders, setMyOrders] = useState<MyOrder[]>([])
@@ -229,7 +230,7 @@ export default function Orders() {
         customer_id: customerId,
         created_by: uid,
         status: 'new',
-        subtotal, discount:0, tax:0, total: subtotal, notes
+        subtotal, discount:0, tax:0, total: subtotal, notes, payment_terms: paymentTerms
       }])
       .select('id')
       .single()
@@ -250,7 +251,7 @@ export default function Orders() {
       alert(e2.message); return
     }
 
-    setRows([]); setNotes(''); setQ(''); setIsOpen(false); setCustomerId(''); setCq('')
+    setRows([]); setNotes(''); setQ(''); setIsOpen(false); setCustomerId(''); setCq(''); setPaymentTerms('CASH')
     await loadMyOrders()
     alert('Order saved')
   }
@@ -480,6 +481,18 @@ export default function Orders() {
                 )}
               </tbody>
             </table>
+          </div>
+
+          <div style={{ marginTop: 8 }}>
+            <label className="small" style={{ display:'block', marginBottom:6 }}><b>Payment Terms</b></label>
+            <select
+              className="input"
+              value={paymentTerms}
+              onChange={e=>setPaymentTerms(e.target.value as 'CASH' | 'CREDIT')}
+            >
+              <option value="CASH">CASH</option>
+              <option value="CREDIT">CREDIT</option>
+            </select>
           </div>
 
           <textarea className="input" placeholder="Notes" value={notes} onChange={e=>setNotes(e.target.value)} />

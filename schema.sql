@@ -41,6 +41,7 @@ create table if not exists public.orders (
   customer_id bigint not null references public.customers(id),
   created_by uuid not null references auth.users(id),
   status order_status not null default 'received',
+  payment_terms text not null default 'CASH' check (payment_terms in ('CASH','CREDIT')),
   subtotal numeric(14,2) not null default 0,
   discount numeric(14,2) not null default 0,
   tax numeric(14,2) not null default 0,

@@ -15,6 +15,7 @@ type Order = {
   total: number | null
   created_by: string | null
   submitted_by: string | null
+  payment_terms?: string | null
   subtotal?: number | null
   discount?: number | null
   tax?: number | null
@@ -58,7 +59,7 @@ export default function AdminBoard() {
     setErr(null)
     const { data, error } = await supabase
       .from('v_orders')
-      .select('id, created_at, status, total, customer_name, created_by, submitted_by')
+      .select('id, created_at, status, total, customer_name, created_by, submitted_by, payment_terms')
       .order('created_at', { ascending: false })
 
     if (error) setErr(error.message)
@@ -279,6 +280,7 @@ async function exportSelectedCsv() {
       'Date'           : new Date(ord.created_at).toLocaleString(),
       'Customer'       : ord.customer_name ?? '',
       'Status'         : ord.status,
+      'Payment Terms'  : ord.payment_terms ?? '',
       'Submitted By'   : ord.submitted_by || (ord.created_by ? ord.created_by.slice(0,8) : ''),
       'SKU'            : it.products?.sku ?? '',
       'Product Name'   : it.products?.name ?? '',
@@ -296,7 +298,7 @@ async function exportSelectedCsv() {
   if (rows.length === 0) return alert('No items found for the selected orders.')
 
   const HEADERS = [
-    'Order ID','Date','Customer','Status','Submitted By',
+    'Order ID','Date','Customer','Status','Payment Terms','Submitted By',
     'SKU','Product Name','UOM','Qty','Unit Price','Line Total',
     'Order Subtotal','Order Discount','Order Tax','Order Total'
   ]
@@ -386,6 +388,7 @@ return (
                 <th>Customer</th>
                 <th style={{width:160}}>Submitted by</th> {/* Always render header */}
                 <th style={{width:140}}>Status</th>
+                <th style={{width:140}}>Terms</th>
                 <th style={{width:160}}>Total</th>
                 <th style={{width:120}}>Row Action</th>
               </tr>
@@ -399,12 +402,13 @@ return (
                   <td>{o.customer_name}</td>
                   <td className="small">{o.submitted_by || (o.created_by ? o.created_by.slice(0,8) : '—')}</td>
                   <td style={{ textTransform:'capitalize', fontWeight:400 }}>{o.status}</td>
+                  <td>{o.payment_terms || '—'}</td>
                   <td>{Number(o.total ?? 0).toLocaleString('id-ID', { style:'currency', currency:'IDR' })}</td>
                   <td><button className="btn" onClick={()=>openDetail(o.id)}>View</button></td>
                 </tr>
               ))}
               {filtered.length === 0 && (
-                <tr><td colSpan={8} className="small">No orders match this filter.</td></tr>
+                <tr><td colSpan={9} className="small">No orders match this filter.</td></tr>
               )}
             </tbody>
           </table>
