@@ -14,7 +14,6 @@ type Order = {
   status: Status
   total: number | null
   created_by: string | null
-  submitted_by_id?: string | null
   submitted_by_name?: string | null
   payment_terms?: string | null
   subtotal?: number | null
@@ -60,7 +59,7 @@ export default function AdminBoard() {
     setErr(null)
     const { data, error } = await supabase
       .from('v_orders')
-      .select('id, created_at, status, total, customer_name, created_by, submitted_by_id, submitted_by_name, payment_terms')
+      .select('id, created_at, status, total, customer_name, created_by, submitted_by_name, payment_terms')
       .order('created_at', { ascending: false })
 
     if (error) setErr(error.message)
