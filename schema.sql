@@ -42,7 +42,7 @@ create table if not exists public.orders (
   created_by uuid not null references auth.users(id),
   submitted_by uuid references auth.users(id),  
   status order_status not null default 'received',
-  payment_terms text not null default 'CASH' check (payment_terms in ('CASH','CREDIT')),
+  payment_terms text default null check (payment_terms in ('CASH','CREDIT') or payment_terms is null),
   subtotal numeric(14,2) not null default 0,
   discount numeric(14,2) not null default 0,
   tax numeric(14,2) not null default 0,

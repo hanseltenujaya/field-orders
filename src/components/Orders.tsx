@@ -50,7 +50,7 @@ export default function Orders() {
   const [customerId, setCustomerId]= useState<number|''>('')
   const [rows, setRows] = useState<OrderRow[]>([])
   const [notes, setNotes] = useState('')
-  const [paymentTerms, setPaymentTerms] = useState<'CASH' | 'CREDIT'>('CASH')
+  const [paymentTerms, setPaymentTerms] = useState<'' | 'CASH' | 'CREDIT'>('')
 
   // my orders
   const [myOrders, setMyOrders] = useState<MyOrder[]>([])
@@ -230,7 +230,7 @@ export default function Orders() {
         customer_id: customerId,
         created_by: uid,
         status: 'new',
-        subtotal, discount:0, tax:0, total: subtotal, notes, payment_terms: paymentTerms
+        subtotal, discount:0, tax:0, total: subtotal, notes, payment_terms: paymentTerms || undefined
       }])
       .select('id')
       .single()
@@ -488,8 +488,9 @@ export default function Orders() {
             <select
               className="input"
               value={paymentTerms}
-              onChange={e=>setPaymentTerms(e.target.value as 'CASH' | 'CREDIT')}
+              onChange={e=>setPaymentTerms(e.target.value as '' | 'CASH' | 'CREDIT')}
             >
+              <option value="" disabled hidden></option>
               <option value="CASH">CASH</option>
               <option value="CREDIT">CREDIT</option>
             </select>
