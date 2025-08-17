@@ -40,6 +40,7 @@ create table if not exists public.orders (
   id bigserial primary key,
   customer_id bigint not null references public.customers(id),
   created_by uuid not null references auth.users(id),
+  submitted_by uuid references auth.users(id),  
   status order_status not null default 'received',
   payment_terms text not null default 'CASH' check (payment_terms in ('CASH','CREDIT')),
   subtotal numeric(14,2) not null default 0,
@@ -50,6 +51,9 @@ create table if not exists public.orders (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table public.orders add column if not exists submitted_by uuid references auth.users(id);
+
 
 create table if not exists public.order_items (
   id bigserial primary key,
@@ -74,6 +78,7 @@ select
   o.id,
   o.customer_id,
   o.created_by,
+  o.submitted_by as submitted_by_id,
   o.status,
   o.payment_terms,
   o.subtotal,
@@ -83,9 +88,11 @@ select
   o.notes,
   o.created_at,
   o.updated_at,
+  p.full_name as submitted_by_name,
   c.name as customer_name
 from public.orders o
-join public.customers c on c.id = o.customer_id;
+join public.customers c on c.id = o.customer_id
+left join public.profiles p on p.id = o.submitted_by;
 
 create or replace function public.touch_updated_at()
 returns trigger language plpgsql as $$

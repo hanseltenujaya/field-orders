@@ -14,7 +14,8 @@ type Order = {
   status: Status
   total: number | null
   created_by: string | null
-  submitted_by: string | null
+  submitted_by_id?: string | null
+  submitted_by_name?: string | null
   payment_terms?: string | null
   subtotal?: number | null
   discount?: number | null
@@ -59,7 +60,7 @@ export default function AdminBoard() {
     setErr(null)
     const { data, error } = await supabase
       .from('v_orders')
-      .select('id, created_at, status, total, customer_name, created_by, submitted_by, payment_terms')
+      .select('id, created_at, status, total, customer_name, created_by, submitted_by_id, submitted_by_name, payment_terms')
       .order('created_at', { ascending: false })
 
     if (error) setErr(error.message)
@@ -281,7 +282,7 @@ async function exportSelectedCsv() {
       'Customer'       : ord.customer_name ?? '',
       'Status'         : ord.status,
       'Payment Terms'  : ord.payment_terms ?? '',
-      'Submitted By'   : ord.submitted_by || (ord.created_by ? ord.created_by.slice(0,8) : ''),
+      'Submitted By'   : ord.submitted_by_name || (ord.created_by ? ord.created_by.slice(0,8) : ''),
       'SKU'            : it.products?.sku ?? '',
       'Product Name'   : it.products?.name ?? '',
       'UOM'            : uomLabel,
@@ -400,7 +401,7 @@ return (
                   <td>#{o.id}</td>
                   <td>{new Date(o.created_at).toLocaleString()}</td>
                   <td>{o.customer_name}</td>
-                  <td className="small">{o.submitted_by || (o.created_by ? o.created_by.slice(0,8) : '—')}</td>
+                  <td className="small">{o.submitted_by_name || (o.created_by ? o.created_by.slice(0,8) : '—')}</td>
                   <td style={{ textTransform:'capitalize', fontWeight:400 }}>{o.status}</td>
                   <td>{o.payment_terms || '—'}</td>
                   <td>{Number(o.total ?? 0).toLocaleString('id-ID', { style:'currency', currency:'IDR' })}</td>
@@ -431,7 +432,11 @@ return (
           <div className="small" style={{marginBottom:8}}>
             {new Date(detail.order.created_at).toLocaleString()} • {detail.order.customer_name} •
             <span className="badge" style={{marginLeft:8, textTransform:'capitalize'}}>{detail.order.status}</span>
-            {detail.order.submitted_by && <span style={{marginLeft:8}}>• Submitted by: {detail.order.submitted_by}</span>}
+            {(detail.order.submitted_by_name || detail.order.created_by) && (
+              <span style={{marginLeft:8}}>
+                • Submitted by: {detail.order.submitted_by_name || (detail.order.created_by ? detail.order.created_by.slice(0,8) : '')}
+              </span>
+            )}
           </div>
 
           <div className="card" style={{marginBottom:12}}>
