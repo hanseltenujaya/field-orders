@@ -229,6 +229,7 @@ export default function Orders() {
       .insert([{
         customer_id: customerId,
         created_by: uid,
+        submitted_by: uid,
         status: 'new',
         subtotal, discount:0, tax:0, total: subtotal, notes, payment_terms: paymentTerms || undefined
       }])
