@@ -70,7 +70,20 @@ create table if not exists public.order_status_history (
 );
 
 create or replace view public.v_orders as
-select o.*, c.name as customer_name
+select
+  o.id,
+  o.customer_id,
+  o.created_by,
+  o.status,
+  o.payment_terms,
+  o.subtotal,
+  o.discount,
+  o.tax,
+  o.total,
+  o.notes,
+  o.created_at,
+  o.updated_at,
+  c.name as customer_name
 from public.orders o
 join public.customers c on c.id = o.customer_id;
 
